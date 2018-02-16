@@ -471,14 +471,17 @@ if __name__ == '__main__':
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
 		for sd in salmondirs:
-			samplename = os.path.basename(sd)
+			#samplename = os.path.basename(sd)
+			#For ENCODE
+			samplename = os.path.basename(sd).split('_')
+			samplename = ('_rep').join([samplename[0], samplename[1]])
 			psis = calculatepsi(positionfactors, sd)
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)
 			psidf.columns = ['Gene', samplename]
 			psidfs.append(psidf)
 		bigpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), psidfs)
-		bigpsidf.to_csv('CADFmr1KOpsis.txt', sep = '\t', index = False)
+		bigpsidf.to_csv('ENCODEpsis.3end.txt', sep = '\t', index = False)
 
 	elif args.mode == 'LME':
 		getdpsis(args.psifile)
