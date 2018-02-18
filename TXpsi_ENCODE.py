@@ -82,21 +82,36 @@ def getdpsis(df, samples):
 	d = {'Gene' : genes}
 	dpsidf = pd.DataFrame(data = d)
 	
+	analyzedsamples = []
 	for column in df:
 		#If this is a control kd column, skip it
 		if column == 'Gene' or column.split('_')[0] == 'controlkd':
 			continue
+		#If this is a replicate of a kd we've already seen, skip it
+		samplename = column.split('_')[0] + '_' + column.split('_')[1]
+		if samplename in analyzedsamples:
+			continue
+
 		controlid = column.split('_')[3]
 		samplecolumn = df[column]
 		
+		#Get kd sample columns
+		kddf = psidf.select(lambda col: samplename in col, axis = 1)
 		#Get control sample columns
 		controldf = psidf.select(lambda col: controlid in col and 'controlkd' in col, axis = 1)
+		#Take the mean of the two kd samples
+		kddf['kdmean'] = (kddf.iloc[:, 0] + kddf.iloc[:, 1]) / 2
 		#Take the mean of the two control samples
 		controldf['controlmean'] = (controldf.iloc[:, 0] + controldf.iloc[:, 1]) / 2
 
-		dpsicolumnname = column + '_dpsi'
-		dpsicolumn = pd.Series(samplecolumn - controldf['controlmean']).reset_index(drop = True) #have to reset index to add column to dpsidf
+		dpsicolumnname = samplename + '_dpsi'
+		#dpsi is the difference of the means
+		dpsicolumn = pd.Series(kddf['kdmean'] - controldf['controlmean']).reset_index(drop = True) #have to reset index to add column to dpsidf
 		dpsidf[dpsicolumnname] = dpsicolumn
+
+		#Add this sample to analyzedsamples
+		analyzedsamples.append(samplename)
+
 	
 	return dpsidf
 
