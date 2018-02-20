@@ -3,6 +3,7 @@
 #to the sample ids in SamplesTable
 #Second, calculate delta psis, using the replicate and kd/control relationships in SamplesTable.
 #There are two replicates per kd for each cell line.  Can either keep cell lines separate or use them as a covariate.
+#Third, calculate nlme pvalues.
 
 import os
 import pandas as pd
@@ -76,6 +77,7 @@ def getdpsis_onecellline(df):
 
 	#First column in dpsi dataframe is gene column of psi dataframe
 	genes = list(df['Gene'])
+	print(len(genes))
 	#Remove that annoying dot in the ensembl gene id
 	genes = [gene.split('.')[0] for gene in genes]
 	d = {'Gene' : genes}
@@ -95,9 +97,11 @@ def getdpsis_onecellline(df):
 		samplecolumn = df[column]
 		
 		#Get kd sample columns
-		kddf = psidf.select(lambda col: samplename in col, axis = 1)
+		kddf = df.select(lambda col: samplename in col, axis = 1)
+		print(kddf.shape)
 		#Get control sample columns
-		controldf = psidf.select(lambda col: controlid in col and 'controlkd' in col, axis = 1)
+		controldf = df.select(lambda col: controlid in col and 'controlkd' in col, axis = 1)
+		#print(controldf.shape)
 		#Take the mean of the two kd samples
 		kddf['kdmean'] = kddf.mean(axis = 1)
 		#Take the mean of the two control samples
@@ -138,7 +142,7 @@ def getdpsis_twocelllines(df):
 			continue
 		
 		#Get kd sample columns
-		kddf = psidf.select(lambda col: samplename in col, axis = 1).reset_index(drop = True)
+		kddf = df.select(lambda col: samplename in col, axis = 1).reset_index(drop = True)
 		
 		#Sometimes this kd wasn't done in both HepG2 and K562
 		#If it wasn't, we have to skip it
