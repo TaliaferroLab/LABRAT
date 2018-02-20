@@ -13,6 +13,7 @@ from rpy2.robjects.packages import importr
 from rpy2.robjects import pandas2ri, Formula, FloatVector
 from rpy2.rinterface import RRuntimeError
 import warnings
+import argparse
 
 
 def readSamplesTable(samplestable):
@@ -64,8 +65,6 @@ def loadpsis(psis, samples):
 	psidf.dropna(axis = 0, how = 'any', inplace = True)
 	hepg2df.dropna(axis = 0, how = 'any', inplace = True)
 	k562df.dropna(axis = 0, how = 'any', inplace = True)
-
-	psidf.to_csv('~/Desktop/psidf.txt', sep = '\t', index = False)
 
 	return psidf, hepg2df, k562df
 
@@ -149,8 +148,6 @@ def getdpsis_twocelllines(df):
 		if len(hepg2kds) < 2 or len(k562kds) < 2:
 			continue
 
-		#print(kddf.head())
-		#print('\n' + '#'*100 + '\n')
 		#Get control sample IDs for the 4 knockdown samples
 		controlIDs = []
 		for column in kddf.columns.values.tolist():
@@ -172,9 +169,6 @@ def getdpsis_twocelllines(df):
 		#Take the mean of the two cell line means
 		kddf['kdmean'] = (kddf.loc[:, 'HepG2_kdmean'] + kddf.loc[:, 'K562_kdmean']) / 2
 		controldf['controlmean'] = (controldf.loc[:, 'HepG2_controlmean'] + controldf.loc[:, 'K562_controlmean']) / 2
-		
-		#print(controldf.head())
-		#print('\n' + '#'*100 + '\n')
 
 		dpsicolumnname = samplename + '_dpsi'
 		#dpsi is the difference of the means
@@ -214,6 +208,7 @@ def getlmep_singlecellline(df):
 	nullrndm = Formula('~1 | samples')
 
 	analyzedsamples = []
+	samplecounter = 0
 	for column in df:
 		#Going to make a dataframe of kd and control samples.
 		sampledf = {'Gene' : genes}
@@ -230,7 +225,8 @@ def getlmep_singlecellline(df):
 		if samplename in analyzedsamples:
 			continue
 
-		print('Calculating pvalues for {0}...'.format(samplename))
+		samplecounter +=1
+		print('Calculating pvalues for {0} (number {1})...'.format(samplename, samplecounter))
 		
 		#Get 2 replicate columns
 		kddf = df.select(lambda col: samplename in col, axis = 1).reset_index(drop = True)
@@ -336,6 +332,7 @@ def getlmepdf_twocelllines(df):
 	nullfmla = Formula('value ~ 1 + cellline1')
 	nullrndm = Formula('~1 | samples')
 
+	samplecounter = 0
 	analyzedsamples = []
 	for column in df:
 		#Going to make a dataframe of kd and control samples.
@@ -353,7 +350,8 @@ def getlmepdf_twocelllines(df):
 		if samplename in analyzedsamples:
 			continue
 
-		print('Calculating pvalues for {0}...'.format(samplename))
+		samplecounter +=1
+		print('Calculating pvalues for {0} (number {1})...'.format(samplename, samplecounter))
 		
 		#Get 2 replicate columns
 		kddf = df.select(lambda col: samplename in col, axis = 1).reset_index(drop = True)
@@ -442,19 +440,36 @@ def getlmepdf_twocelllines(df):
 		pvaluedf['{0}_qval'.format(samplename)] = qvalues
 		#Add this sample to analyzedsamples so that we don't do the same thing all over again for the other samples for this kd
 		analyzedsamples.append(samplename)
-		print(pvaluedf.head())
 
 	return pvaluedf
 			
 
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--mode', type = str, choices = ['dpsi_oneline', 'dpsi_twolines', 'pval_oneline', 'pval_twolines'])
+	parser.add_argument('--samplestable', type = str, help = 'File relating sample IDs to their controls. Usually SamplesTable.txt.')
+	parser.add_argument('--psitable', type = str, help = 'Table of PSI values for all samples and all genes. Output of TXpsi.py.')
+	args = parser.parse_args()
 
+	samples = readSamplesTable(args.samplestable)
+	psidf, hepg2df, k562df = loadpsis(args.psitable, samples)
+	if args.mode == 'dpsi_oneline':
+		hepg2dpsidf = getdpsis_onecellline(hepg2df)
+		hepg2dpsidf.to_csv('HepG2.dpsi.txt', sep = '\t', header = True, index = False)
+		k562dpsidf = getdpsis_onecellline(k562df)
+		k562dpsidf.to_csv('K562.dpsi.txt', sep = '\t', header = True, index = False)
 
-samples = readSamplesTable(sys.argv[1])
-psidf, hepg2df, k562df = loadpsis(sys.argv[2], samples)
-dpsidf = getdpsis_onecellline(k562df)
-#dpsidf = getdpsis_twocelllines(psidf)
-print(dpsidf.head())
-#lmepdf = getlmep_singlecellline(hepg2df)
-#lmepdf.to_csv('HepG2')
-#getlmepdf_twocelllines(psidf)
+	elif args.mode == 'dpsi_twolines':
+		dpsidf = getdpsis_twocelllines(psidf)
+		dpsidf.to_csv('HepG2andK562.dpsi.txt', sep = '\t', header = True, index = False)
+
+	elif args.mode == 'pval_oneline':
+		hepg2lmepdf = getlmep_singlecellline(hepg2df)
+		hepg2lmepdf.to_csv('HepG2.psi.pval.txt', sep = '\t', header = True, index = False)
+		k562lmepdf = getlmep_singlecellline(k562df)
+		k562lmepdf.to_csv('K562.psi.pval.txt', sep = '\t', header = True, index = False)
+
+	elif args.mode == 'pval_twolines':
+		pvaluedf = getlmepdf_twocelllines(psidf)
+		pvaluedf.to_csv('HepG2andK562.psi.pval.txt', sep = '\t', header = True, index = False)
 
