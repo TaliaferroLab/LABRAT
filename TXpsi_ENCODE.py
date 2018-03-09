@@ -15,6 +15,7 @@ from rpy2.robjects import pandas2ri, Formula, FloatVector
 from rpy2.rinterface import RRuntimeError
 import warnings
 import argparse
+import time
 
 
 def readSamplesTable(samplestable):
@@ -428,6 +429,9 @@ def getlmepdf_twocelllines(df):
 
 			pvalues.append(pvalue)
 
+			#Sleep one tenth of a second
+			#time.sleep(0.1)
+
 		#Turn pvalues into qvalues
 		#Turn list of pvalues into R vector
 		pvec = FloatVector(pvalues)
@@ -444,6 +448,10 @@ def getlmepdf_twocelllines(df):
 		pvaluedf['{0}_qval'.format(samplename)] = qvalues
 		#Add this sample to analyzedsamples so that we don't do the same thing all over again for the other samples for this kd
 		analyzedsamples.append(samplename)
+
+		#Sleep 3 minutes
+		#print('Sleeping...')
+		#time.sleep(180)
 
 	return pvaluedf
 			

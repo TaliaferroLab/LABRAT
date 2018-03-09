@@ -255,8 +255,8 @@ def makeTFfasta(gff, genomefasta):
 def runSalmon(transcriptfasta, threads, reads1, reads2, samplename):
 	#transcriptfasta should probably be 'TFseqs.fasta' produced by makeTFfasta
 	#index transcripts if index does not already exist
-	if os.path.exists('/vol3/home/taliaferro/Annotations/hg38/hg38.entiretranscript.idx') == False:
-		command = ['salmon', 'index', '-t', transcriptfasta, '-i', 'transcripts.txpsi.hg38.idx', '--type', 'quasi', '-k', '31']
+	if os.path.exists('/vol3/home/taliaferro/data/Bentley/hg38.tfseqs.idx') == False:
+		command = ['salmon', 'index', '-t', transcriptfasta, '-i', 'hg38.tfseqs.idx', '--type', 'quasi', '-k', '31']
 		print 'Indexing transcripts...'
 		subprocess.call(command)
 		print 'Done indexing!'
@@ -351,10 +351,13 @@ def getdpsis(psifile):
 		'DKOWT_soma1', 'DKOWT_soma2', 'Hr0Neurite1', 'Hr0Neurite2', 'Hr12Neurite1', 'Hr12Neurite2', 'KOAxonA', 'KOAxonB', 'KOAxonC', 'Mbnl1KO_neurite1', 
 		'Mbnl1KO_neurite2', 'Mbnl2KO_neurite1', 'Mbnl2KO_neurite2', 'Mbnlkd_neurite1', 'Mbnlkd_neurite2', 'Mbnlkd_neurite3', 'N2ANeurite2', 'N2ANeurite3',
 		'PeriphAxon1', 'PeriphAxon2', 'SKOWT_neurite1', 'SKOWT_neurite2', 'WTAxonA', 'WTAxonB', 'WTAxonC']})
-	'''
+	
 
 	samp_conds = OrderedDict({'cond1' : ['WTSomaA', 'WTSomaB', 'WTSomaC', 'KOSomaA', 'KOSomaB', 'KOSomaC'],
 		'cond2' : ['WTAxonA', 'WTAxonB', 'WTAxonC', 'KOAxonA', 'KOAxonB', 'KOAxonC']})
+
+	'''
+	samp_conds = OrderedDict({'cond1': ['HMLE-3PR', 'HMLE-3PRP'], 'cond2' : ['HMLERAS-3PR', 'HMLERAS-3PRP']})
 
 	#Get a list of all samples
 	samps = []
@@ -471,10 +474,12 @@ if __name__ == '__main__':
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
 		for sd in salmondirs:
-			#samplename = os.path.basename(sd)
+			samplename = os.path.basename(sd)
+			
 			#For ENCODE
-			samplename = os.path.basename(sd).split('_')
-			samplename = ('_rep').join([samplename[0], samplename[1]])
+			#samplename = os.path.basename(sd).split('_')
+			#samplename = ('_rep').join([samplename[0], samplename[1]])
+			
 			psis = calculatepsi(positionfactors, sd)
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)
