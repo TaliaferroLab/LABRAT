@@ -17,6 +17,9 @@ from Bio import SeqIO
 
 #Count kmers in a single sequence
 def countkmers(seq, k):
+	#Get the total number of considered kmers.  This is different than len(seq) - k + 1 because we aren't considering every kmer (homopolymers, for example)
+	consideredkmers = 0
+
 	kmers = {} #{kmer : count}
 	seq = seq.replace('T', 'U').upper()
 
@@ -43,56 +46,65 @@ def countkmers(seq, k):
 			previouskmer = currentkmer
 			currentkmer = kmer
 			currentkmercount = 1
+			consideredkmers += 1
 		else:
 			currentkmercount +=1
 
-	return kmers
+	return kmers, consideredkmers
 
 #Count kmers in all seqs in the uniqueutrfasta
 def countkmers_fasta(fasta, k):
 	k = int(k)
 
 	kmerdict = {} #{ENSGENE : {UTRnumber : {kmer : count}}}
+	consideredkmersdict = {} #{ENSGENE : {UTRnumber : total number of kmers}}
 	with open(fasta, 'r') as infh:
 		for record in SeqIO.parse(infh, 'fasta'):
 			genename = record.id.split('.')[0]
 			UTRnumber = int(record.id.split('uniqueUTR')[1])
-			kmers = countkmers(str(record.seq), k)
+			kmers, consideredkmers = countkmers(str(record.seq), k)
+			
 			if genename not in kmerdict:
 				kmerdict[genename] = {}
 			kmerdict[genename][UTRnumber] = kmers
 
-	return kmerdict
+			if genename not in consideredkmersdict:
+				consideredkmersdict[genename] = {}
+			consideredkmersdict[genename][UTRnumber] = consideredkmers
+
+	return kmerdict, consideredkmersdict
 
 #Calculate psi values for each kmer given a dictionary like kmerdict {ENSGENE: {UTRnumber : {kmers}}}
-def calculatepsi(kmerdict, k):
+def calculatepsi(kmerdict, consideredkmersdict, k):
 	#kmerdict = {} #{ENSGENE : {UTRnumber : {kmer : count}}}
 	psis = {} #{kmer : psi}
 	utrcounts = {} #{genename : number of utrs}
-	rawkmercounts = {} #{kmer : raw number of times its seen in any utr}
-	weightedkmercounts = {} #{kmer : weighted number of times its seen in any utr}
+	rawkmerdensities = {} #{kmer : [raw densities across all UTRs]}
+	weightedkmerdensities = {} #{kmer : [weighted densities across all UTRs]}
 
 	#Get the number of utrs for each gene
 	for gene in kmerdict:
 		utrcounts[gene] = len(kmerdict[gene])
 
-	#Get the raw number of times and weighted number of times each kmer is seen
+	#Get the raw kmer density for each kmer/UTR and the weighted kmer density for each kmer/UTR
 	for gene in kmerdict:
 		for utrnumber in kmerdict[gene]:
 			for kmer in kmerdict[gene][utrnumber]:
 				rawcount = kmerdict[gene][utrnumber][kmer]
 				weightingfactor = float(utrnumber / (utrcounts[gene] - 1)) #just like calculating psis in LABRAT
-				weightedcounts = rawcount * weightingfactor
+				totalkmers = consideredkmersdict[gene][utrnumber]
+				rawdensity = rawcount / totalkmers
+				weightedkmerdensity = rawdensity * weightingfactor
 				
-				if kmer not in rawkmercounts:
-					rawkmercounts[kmer] = rawcount
+				if kmer not in rawkmerdensities:
+					rawkmerdensities[kmer] = [rawdensity]
 				else:
-					rawkmercounts[kmer] += rawcount
+					rawkmerdensities[kmer].append(rawdensity)
 
-				if kmer not in weightedkmercounts:
-					weightedkmercounts[kmer] = weightedcounts
+				if kmer not in weightedkmerdensities:
+					weightedkmerdensities[kmer] = [weightedkmerdensity]
 				else:
-					weightedkmercounts[kmer] += weightedcounts
+					weightedkmerdensities[kmer].append(weightedkmerdensity)
 
 	#psi for each kmer is sum of all weighted counts divided by sum of all raw counts
 	#Make all possible kmers
@@ -101,17 +113,16 @@ def calculatepsi(kmerdict, k):
 	allkmers = [''.join(x) for x in itertools.product(bases, repeat = k)]
 
 	for kmer in allkmers:
-		if kmer in rawkmercounts:
-			psi = weightedkmercounts[kmer] / rawkmercounts[kmer]
+		if kmer in rawkmerdensities:
+			psi = sum(weightedkmerdensities[kmer]) / sum(rawkmerdensities[kmer])
 		else:
 			psi = 'NA'
 		psis[kmer] = psi
 
-	print(psis)
-	print(min(psis.values()), max(psis.values()))
+	return psis
 
 	
 
 #print(countkmers('TACGACGTACTACTGACTGACTGCAGTACGTACGTACTGACACACACTGACGTACTGACTGACTACTCA', 5))
-kmerdict = countkmers_fasta(sys.argv[1], 5)
-calculatepsi(kmerdict, 5)
+kmerdict, consideredkmersdict = countkmers_fasta(sys.argv[1], 5)
+calculatepsi(kmerdict, consideredkmersdict, 5)
