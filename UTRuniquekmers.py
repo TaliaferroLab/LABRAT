@@ -13,6 +13,7 @@
 import itertools
 import sys
 from Bio import SeqIO
+import argparse
 
 
 #Count kmers in a single sequence
@@ -119,10 +120,81 @@ def calculatepsi(kmerdict, consideredkmersdict, k):
 			psi = 'NA'
 		psis[kmer] = psi
 
+	with open('/Users/mtaliaferro/Desktop/temp2.txt', 'w') as outfh:
+		for kmer in psis:
+			outfh.write(kmer + '\t' + str(psis[kmer]) + '\t' + str(kmer.count('G') + kmer.count('C')) + '\n')
+
 	return psis
 
-	
 
-#print(countkmers('TACGACGTACTACTGACTGACTGCAGTACGTACGTACTGACACACACTGACGTACTGACTGACTACTCA', 5))
-kmerdict, consideredkmersdict = countkmers_fasta(sys.argv[1], 5)
-calculatepsi(kmerdict, consideredkmersdict, 5)
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--fasta', type = str, help = 'Unique UTR sequences in fasta format.  Output of UTRuniqueseqs_PF.py.')
+	parser.add_argument('-k', type = int, help = 'Kmer length.')
+	parser.add_argument('--controlmode', choices = ['twogenelists', 'kmerzscore'], help = 'How to control for GC content?')
+	parser.add_argument('--genelist1', type = str, help = 'For use with controlmode twogenelists. List of genes in set 1.')
+	parser.add_argument('--genelist2', type = str, help = 'For use with controlmode twogenelists. List of genes in set 2.')
+	args = parser.parse_args()
+
+	#If we aren't using a control
+	if not args.controlmode:
+		kmerdict, consideredkmersdict = countkmers_fasta(args.fasta, args.k)
+		psis = calculatepsi(kmerdict, consideredkmersdict, args.k)
+		#Write results
+		fn = args.fasta + '.utrkmers'
+		with open(fn, 'w') as outfh:
+			for kmer in psis:
+				outfh.write(kmer + '\t' + str(psis[kmer]) + '\n')
+
+	#Genelists are list of ensembl IDs without dots
+	if args.controlmode == 'twogenelists':
+		genes1 = []
+		genes2 = []
+		with open(args.genelist1, 'r') as infh:
+			for line in infh:
+				line = line.strip()
+				genes1.append(line)
+
+		with open(args.geneslist2, 'r') as infh:
+			for line in infh:
+				line = line.strip()
+				genes2.append(line)
+
+		with open(args.fasta, 'r') as infh:
+			records1 = []
+			records2 = []
+			for record in SeqIO.parse(infh, 'fasta'):
+				genename = record.id.split('.')[0]
+				if genename in genes1:
+					records1.append(record)
+				if genename in genes2:
+					records2.append(record)
+
+		#Make temporary fasta files for the two gene lists
+		SeqIO.write(records1, 'temp1.fasta', 'fasta')
+		SeqIO.write(records2, 'temp2.fasta', 'fasta')
+
+		#Run functions for two fasta files
+		kmerdict, consideredkmersdict = countkmers_fasta('temp1.fasta', args.k)
+		psis1 = calculatepsi(kmerdict, consideredkmersdict, args.k)
+
+		kmerdict, consideredkmersdict = countkmers_fasta('temp2.fasta', args.k)
+		psis2 = calculatepsi(kmerdict, consideredkmersdict, args.k)
+
+		#Calculate dpsis
+		dpsis = {}
+		for kmer in psis1:
+			if psis1[kmer] != 'NA' and psis2[kmer] != 'NA':
+				dpsi = psis2[kmer] - psis1[kmer]
+				dpsis[kmer] = dpsi
+			else:
+				dpsis[kmer] = 'NA'
+
+		fn = args.fasta + '.utrkmers'
+		with open(fn, 'w') as outfh:
+			outfh.write('kmer' + '\t' + 'genes1psi' + '\t' + 'genes2psi' + '\t' + 'dpsi' + '\n')
+			for kmer in dpsis:
+				outfh.write(kmer + '\t' + str(psis1[kmer]) + '\t' + str(psis2[kmer]) + '\t' + str(dpsis[kmer]) + '\n')
+
+
+

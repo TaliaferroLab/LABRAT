@@ -664,32 +664,6 @@ if __name__ == '__main__':
 
 
 
-'''
-#To do:
-#argparse
-
-#posfactors = getpositionfactors(sys.argv[1])
-#outputfh = open('pf.pkl', 'wb')
-#pickle.dump(posfactors, outputfh)
-#outputfh.close()
-pkl = open('pf.pkl', 'rb')
-posfactors = pickle.load(pkl)
-pkl.close()
-UTRcoords = getallUTRcoords(sys.argv[1], posfactors)
-cleanedUTRcoords = mergeUTRcoords(sys.argv[1], UTRcoords)
-uniqueutrcoords = getuniquecoords(sys.argv[1], cleanedUTRcoords)
-outputfh = open('uniquecoords.pkl', 'wb')
-pickle.dump(uniqueutrcoords, outputfh)
-outputfh.close()
-
-pkl = open('uniquecoords.pkl', 'rb')
-uniqueutrcoords = pickle.load(pkl)
-pkl.close()
-makegff(sys.argv[1], uniqueutrcoords)
-
-getsequences('uniqueutrcoords.gff', sys.argv[2])
-'''
-
 
 
 
