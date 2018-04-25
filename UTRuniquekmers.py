@@ -6,8 +6,9 @@
 #We can count the abundance of kmers in each unique region, ending up with a "psi" score for each kmer in
 #each gene, similar to the psi values calculated in LABRAT.  There's a problem here, though.  AU-rich kmers
 #are naturally going to have higher psi values because of the lower GC content further and further into the 
-#3' UTR.  To account for this, we will (1) compare psi values for kmers in two different sets of genes, and
-#(2) compare the psi value of a kmer to the psi values of 50 GC- & CpG-matched kmers to get a z-score for the kmer.
+#3' UTR.  To account for this, we will  compare the psi value of a kmer to the psi values of 50 GC- & 
+#CpG-matched kmers to get a z-score for the kmer. We can then compare z-scores between two sets of genes,
+#one of which is differentailly localized depending on APA site and one of which is not.
 
 #python3
 import itertools
@@ -95,6 +96,7 @@ def calculatepsi(kmerdict, consideredkmersdict, k):
 				rawcount = kmerdict[gene][utrnumber][kmer]
 				weightingfactor = float(utrnumber / (utrcounts[gene] - 1)) #just like calculating psis in LABRAT
 				totalkmers = consideredkmersdict[gene][utrnumber]
+				print(gene, utrnumber)
 				rawdensity = rawcount / totalkmers
 				weightedkmerdensity = rawdensity * weightingfactor
 				

@@ -433,9 +433,9 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 		#Make bed file
 		with open('temp{0}.bed'.format(i), 'w') as outfh:
 			for exon in utrexons:
-				#If this is a feature of length 1 (start = stop in gff), subtract one from the start so that bedtools handles it correctly
+				#If this is a feature of length 1 (start = stop in gff), add one to the stop so that bedtools handles it correctly
 				if exon[0] == exon[1]:
-					outfh.write(('\t').join([chrm, str(exon[0] - 1), str(exon[1]), '.', '1000', strand]) + '\n')
+					outfh.write(('\t').join([chrm, str(exon[0]), str(exon[1] + 1), '.', '1000', strand]) + '\n')
 				else:
 					outfh.write(('\t').join([chrm, str(exon[0]), str(exon[1]), '.', '1000', strand]) + '\n')
 
