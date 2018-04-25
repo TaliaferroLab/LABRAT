@@ -14,6 +14,7 @@ import itertools
 import sys
 from Bio import SeqIO
 import argparse
+import os
 
 
 #Count kmers in a single sequence
@@ -195,6 +196,9 @@ if __name__ == '__main__':
 			outfh.write('kmer' + '\t' + 'genes1psi' + '\t' + 'genes2psi' + '\t' + 'dpsi' + '\n')
 			for kmer in dpsis:
 				outfh.write(kmer + '\t' + str(psis1[kmer]) + '\t' + str(psis2[kmer]) + '\t' + str(dpsis[kmer]) + '\n')
+
+		os.remove('temp1.fasta')
+		os.remove('temp2.fasta')
 
 
 

@@ -10,6 +10,7 @@ import pybedtools
 from Bio import SeqIO
 import gzip
 import argparse
+import random
 
 #python2
 
@@ -348,11 +349,16 @@ def mergeUTRs(txids, db, listofUTRcoords):
 	#Merge the UTR exons
 	bed = pybedtools.BedTool('temp.sorted.bed')
 	mergedbed = bed.merge()
-
-	#Get the merged exons
-	mergedexons = []
+	bedlines = []
 	for exon in mergedbed:
-		mergedexons.append([int(exon[1]), int(exon[2])])
+		bedlines.append([int(exon[1]), int(exon[2])])
+
+	mergedexons = []
+	if len(bedlines) == 1:
+		mergedexons = [bedlines[0][0], bedlines[0][1]]
+	elif len(bedlines) > 1:
+		for exon in bedlines:
+			mergedexons.append([int(exon[0]), int(exon[1])])
 
 	os.remove('temp.bed')
 	os.remove('temp.sorted.bed')
@@ -427,7 +433,11 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 		#Make bed file
 		with open('temp{0}.bed'.format(i), 'w') as outfh:
 			for exon in utrexons:
-				outfh.write(('\t').join([chrm, str(exon[0]), str(exon[1]), '.', '1000', strand]) + '\n')
+				#If this is a feature of length 1 (start = stop in gff), subtract one from the start so that bedtools handles it correctly
+				if exon[0] == exon[1]:
+					outfh.write(('\t').join([chrm, str(exon[0] - 1), str(exon[1]), '.', '1000', strand]) + '\n')
+				else:
+					outfh.write(('\t').join([chrm, str(exon[0]), str(exon[1]), '.', '1000', strand]) + '\n')
 
 		#Now sort bed by chrm and start position
 		command = ['sort', '-k1,1', '-k2,2n', 'temp{0}.bed'.format(i)]
@@ -507,7 +517,7 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 					#If both start and stop are less than the previous end, skip this exon
 					elif exon[0] < previousend and exon[1] < previousend:
 						continue
-					previousend = utrend
+
 			elif strand == '-':
 				for exon in uniqueutrs[i]:
 					#If both start and stop are less than the previous end, we are good
@@ -519,8 +529,8 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 					#If both start and stop are greater than the previous end, skip this exon
 					elif exon[0] > previousend and exon[1] > previousend:
 						continue
-					previousend = utrend
 
+			previousend = utrend
 			uniqueutrs_filt[i] = utrcoords
 
 	return uniqueutrs_filt
@@ -566,6 +576,8 @@ def makegff(gff, uniqueutrcoords):
 	print 'Making gff of unique UTR sequences for {0} genes...'.format(len(uniqueutrcoords))
 
 	with open('uniqueutrcoords.gff', 'w') as outfh:
+		#Write line indicating what this gff was made from
+		outfh.write('#gff_annotation = {0}'.format(gff) + '\n')
 		for gene in uniqueutrcoords:
 			chrm = db[gene].chrom
 			strand = db[gene].strand
