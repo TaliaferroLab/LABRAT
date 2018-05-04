@@ -12,6 +12,7 @@ from collections import OrderedDict
 from rpy2.robjects.packages import importr
 from rpy2.robjects import pandas2ri, Formula, FloatVector
 from rpy2.rinterface import RRuntimeError
+from Bio.SeqIO.QualityIO import FastqGeneralIterator
 import math
 
 
@@ -251,12 +252,12 @@ def makeTFfasta(gff, genomefasta):
 					exons.append([exon.start, exon.end])
 
 			#For last two exons
-			#TFs[txname] = [transcript.chrom, transcript.strand, exons[-2], exons[-1]]
+			TFs[txname] = [transcript.chrom, transcript.strand, exons[-2], exons[-1]]
 
 			#For all exons
-			TFs[txname] = [transcript.chrom, transcript.strand]
-			for exon in exons:
-				TFs[txname].append(exon)
+			#TFs[txname] = [transcript.chrom, transcript.strand]
+			#for exon in exons:
+				#TFs[txname].append(exon)
 
 	
 	#Get sequences of TFs
@@ -290,11 +291,42 @@ def makeTFfasta(gff, genomefasta):
 			outfh.write('>' + TF + '\n' + str(seq) + '\n')
 	'''
 
+def fastqtrimmer(threeprimetrim, forreads, revreads):
+	#Maybe you want to trim the reads from the 3' end before giving them to salmon.
+	#Trim <threeprimetrim> nt from the 3' end of the read
+	threeprimetrim = int(threeprimetrim)
+
+	counter = 0
+	foutfilename = 'tempf.fastq'
+	routfilename = 'tempr.fastq'
+	with gzip.open(forreads, 'rb') as forinfh, gzip.open(revreads, 'rb') as revinfh, open(foutfilename, 'w') as foroutfh, open(routfilename, 'w') as revoutfh:
+		try:
+			for title, seq, qual in FastqGeneralIterator(forinfh):
+				counter +=1
+				if counter % 10000000 == 0:
+					print 'On read {0} of {1}.'.format(counter, forreads)
+				foroutfh.write('@{0}\n{1}\n+\n{2}\n'.format(title, seq[:threeprimetrim * -1], qual[:threeprimetrim* -1]))
+		except ValueError:
+			pass
+
+		try:
+			counter = 0
+			for title, seq, qual in FastqGeneralIterator(revinfh):
+				counter +=1
+				if counter % 10000000 == 0:
+					print 'On read {0} of {1}.'.format(counter, revreads)
+				revoutfh.write('@{0}\n{1}\n+\n{2}\n'.format(title, seq[:threeprimetrim * -1], qual[:threeprimetrim* -1]))
+
+		except ValueError:
+			pass
+
+	print 'Done trimming {0} and {1}.'.format(forreads, revreads)
+
 def runSalmon(transcriptfasta, threads, reads1, reads2, samplename):
 	#transcriptfasta should probably be 'TFseqs.fasta' produced by makeTFfasta
 	#index transcripts if index does not already exist
-	if os.path.exists('/vol3/home/taliaferro/data/Bentley/hg38.tfseqs.idx') == False:
-		command = ['salmon', 'index', '-t', transcriptfasta, '-i', 'hg38.tfseqs.idx', '--type', 'quasi', '-k', '31']
+	if os.path.exists('/vol3/home/taliaferro/data/T1DNeuron/LABRAT/hg38.tfseqs.idx') == False:
+		command = ['salmon', 'index', '-t', transcriptfasta, '-i', '/vol3/home/taliaferro/data/T1DNeuron/LABRAT/hg38.tfseqs.idx', '--type', 'quasi', '-k', '31']
 		print 'Indexing transcripts...'
 		subprocess.call(command)
 		print 'Done indexing!'
@@ -302,7 +334,7 @@ def runSalmon(transcriptfasta, threads, reads1, reads2, samplename):
 	#paired end
 	if reads2:
 		print 'Running salmon for {0}...'.format(samplename)
-		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', '/vol3/home/taliaferro/Annotations/hg38/hg38.entiretranscript.idx']
+		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', '/vol3/home/taliaferro/data/T1DNeuron/LABRAT/hg38.tfseqs.idx']
 		#command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', '/vol3/home/taliaferro/Annotations/dm6/dm6.entiretranscript.idx/']
 
 	#Single end
@@ -380,22 +412,13 @@ def getdpsis(psifile):
 
 	#Store relationships of conditions and the samples in that condition
 	#It's important that this dictionary be ordered because we are going to be iterating through it
-	'''
-	samp_conds = OrderedDict({'cond1': ['CADSoma1', 'CADSoma2', 'CADSoma3', 'Ctrlkd_soma1', 'Ctrlkd_soma2', 'Ctrlkd_soma3', 'DKOKO_neurite1', 'DKOKO_neurite2',
-		'DKOWT_neurite1', 'DKOWT_neurite2', 'DRG1', 'DRG2', 'Hr0Soma1', 'Hr0Soma2', 'Hr12Soma1', 'Hr12Soma2', 'KOSomaA', 'KOSomaB', 'KOSomaC', 'Mbnl1KO_soma1',
-		'Mbnl1KO_soma2', 'Mbnl2KO_soma1', 'Mbnl2KO_soma2', 'Mbnlkd_soma1', 'Mbnlkd_soma2', 'Mbnlkd_soma3', 'N2ASoma2', 'N2ASoma3', 'SKOWT_soma1', 'SKOWT_soma2',
-		'WTSomaA', 'WTSomaB', 'WTSomaC'],
-		'cond2' : ['CADNeurite1', 'CADNeurite2', 'CADNeurite3', 'Ctrlkd_neurite1', 'Ctrlkd_neurite2', 'Ctrlkd_neurite3', 'DKOKO_soma1', 'DKOKO_soma2', 
-		'DKOWT_soma1', 'DKOWT_soma2', 'Hr0Neurite1', 'Hr0Neurite2', 'Hr12Neurite1', 'Hr12Neurite2', 'KOAxonA', 'KOAxonB', 'KOAxonC', 'Mbnl1KO_neurite1', 
-		'Mbnl1KO_neurite2', 'Mbnl2KO_neurite1', 'Mbnl2KO_neurite2', 'Mbnlkd_neurite1', 'Mbnlkd_neurite2', 'Mbnlkd_neurite3', 'N2ANeurite2', 'N2ANeurite3',
-		'PeriphAxon1', 'PeriphAxon2', 'SKOWT_neurite1', 'SKOWT_neurite2', 'WTAxonA', 'WTAxonB', 'WTAxonC']})
-	
 
-	samp_conds = OrderedDict({'cond1' : ['WTSomaA', 'WTSomaB', 'WTSomaC', 'KOSomaA', 'KOSomaB', 'KOSomaC'],
-		'cond2' : ['WTAxonA', 'WTAxonB', 'WTAxonC', 'KOAxonA', 'KOAxonB', 'KOAxonC']})
+	#cond1 = soma, cond2 = neurite
 
-	'''
-	samp_conds = OrderedDict({'cond1': ['HMLE-3PR', 'HMLE-3PRP'], 'cond2' : ['HMLERAS-3PR', 'HMLERAS-3PRP']})
+	samp_conds = OrderedDict({'cond1': ['GFPctrlSomaA', 'GFPctrlSomaB', 'GFPctrlSomaC', 'GFPhypoxiaSomaA', 'GFPhypoxiaSomaB', 'GFPhypoxiaSomaC',
+		'T1DctrlSomaA', 'T1DctrlSomaB', 'T1DctrlSomaC', 'T1DhypoxiaSomaA', 'T1DhypoxiaSomaB', 'T1DhypoxiaSomaC'], 
+		'cond2' : ['GFPctrlNeuriteA', 'GFPctrlNeuriteB', 'GFPctrlNeuriteC', 'GFPhypoxiaNeuriteA', 'GFPhypoxiaNeuriteB', 'GFPhypoxiaNeuriteC',
+		'T1DctrlNeuriteA', 'T1DctrlNeuriteB', 'T1DCtrlNeuriteC', 'T1DhypoxiaNeuriteA', 'T1DhypoxiaNeuriteB', 'T1DhypoxiaNeuriteC']})
 
 	#Get a list of all samples
 	samps = []
@@ -483,6 +506,7 @@ if __name__ == '__main__':
 	parser.add_argument('--reads1', type = str, help = 'Comma separated list of forward read fastq files. Needed for runSalmon.')
 	parser.add_argument('--reads2', type = str, help = 'Comma separated list of reverse read fastq files. Needed for runSalmon.')
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
+	parser.add_argument('--threeprimetrim', type = int, help = 'Number of bases to trim from 3\' end of reads.  Optional for runSalmon.')
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
 	parser.add_argument('--psifile', type = str, help = 'Psi value table. Needed for LME.')
@@ -503,11 +527,18 @@ if __name__ == '__main__':
 			freads = forreads[i]
 			rreads = revreads[i]
 			samplename = samplenames[i]
-			runSalmon('TFseqs.hg38.fasta', args.threads, freads, rreads, samplename)
+			if args.threeprimetrim:
+				print 'Trimming sample {0}...'.format(samplename)
+				fastqtrimmer(args.threeprimetrim, freads, rreads)
+			runSalmon('TFseqs.hg38.fasta', args.threads, 'tempf.fastq', 'tempr.fastq', samplename)
+
+		if args.threeprimetrim:
+			os.remove('tempf.fastq')
+			os.remove('tempr.fastq')
 
 	elif args.mode == 'calculatepsi':
 		print 'Calculating position factors for every transcript...'
-		positionfactors = getpositionfactors(args.gff)
+		positionfactors = getpositionfactors(args.gff, 20)
 		print 'Done with position factors!'
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []

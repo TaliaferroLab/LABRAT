@@ -17,6 +17,10 @@ from Bio import SeqIO
 import argparse
 import os
 import numpy as np
+from pympler.tracker import SummaryTracker
+import time
+import pickle
+from collections import defaultdict
 
 
 #Count kmers in a single sequence
@@ -28,22 +32,20 @@ def countkmers(seq, k):
 	if len(seq) < k:
 		return None, None
 
-	kmers = {} #{kmer : count}
+	kmers = defaultdict(int) #{kmer : count}
 	seq = seq.replace('T', 'U').upper()
 
 	#Make all possible kmers
-	k = int(k)
-	bases = ['A', 'U', 'G', 'C']
-	allkmers = [''.join(x) for x in itertools.product(bases, repeat = k)]
 
 	#Add all kmers to kmers dictionary
-	for kmer in allkmers:
-		kmers[kmer] = 0
+	#for kmer in allkmers:
+		#kmers[kmer] = 0
 
 	currentkmer = ''
 	previouskmer = ''
 	currentkmercount = 0
-	for i in range(len(seq) -k + 1):
+
+	for i in range(len(seq) - k + 1):
 		kmer = seq[i:i+k]
 		#Count homopolymeric stretches as only one instance of kmer, but allow nonoverlapping instances of
 		#kmer in homopolymers
@@ -85,6 +87,7 @@ def countkmers_fasta(fasta, k):
 			consideredkmersdict[genename][UTRnumber] = consideredkmers
 
 	return kmerdict, consideredkmersdict
+
 
 def cleankmerdicts(kmerdict, consideredkmersdict):
 	#Sometimes a UTR is shorter than k, meaning that there are 0 considered kmers.
@@ -155,15 +158,21 @@ def calculatepsi(kmerdict, consideredkmersdict, k):
 				rawdensity = rawcount / totalkmers
 				weightedkmerdensity = rawdensity * weightingfactor
 				
+				
 				if kmer not in rawkmerdensities:
-					rawkmerdensities[kmer] = [rawdensity]
+					#rawkmerdensities[kmer] = [rawdensity]
+					rawkmerdensities[kmer] = rawdensity
 				else:
-					rawkmerdensities[kmer].append(rawdensity)
+					#rawkmerdensities[kmer].append(rawdensity)
+					rawkmerdensities[kmer] += rawdensity
 
 				if kmer not in weightedkmerdensities:
-					weightedkmerdensities[kmer] = [weightedkmerdensity]
+					#weightedkmerdensities[kmer] = [weightedkmerdensity]
+					weightedkmerdensities[kmer] = weightedkmerdensity
 				else:
-					weightedkmerdensities[kmer].append(weightedkmerdensity)
+					#weightedkmerdensities[kmer].append(weightedkmerdensity)
+					weightedkmerdensities[kmer] += weightedkmerdensity
+				
 
 	#psi for each kmer is sum of all weighted counts divided by sum of all raw counts
 	#Make all possible kmers
@@ -173,10 +182,14 @@ def calculatepsi(kmerdict, consideredkmersdict, k):
 
 	for kmer in allkmers:
 		if kmer in rawkmerdensities:
-			psi = sum(weightedkmerdensities[kmer]) / sum(rawkmerdensities[kmer])
+			try:
+				psi = weightedkmerdensities[kmer] / rawkmerdensities[kmer]
+			except ZeroDivisionError:
+				psi = 'NA'
 		else:
 			psi = 'NA'
 		psis[kmer] = psi
+
 
 	return psis
 
@@ -191,9 +204,9 @@ def normalizepsis(psis):
 	for kmer in psis:
 		GCcount = kmer.count('G') + kmer.count('C')
 		psi = psis[kmer]
-		if GCcount not in GCdict:
+		if GCcount not in GCdict and psi != 'NA':
 			GCdict[GCcount] = [psi]
-		else:
+		elif GCcount in GCdict and psi != 'NA':
 			GCdict[GCcount].append(psi)
 
 	for GCcount in GCdict:
@@ -207,6 +220,9 @@ def normalizepsis(psis):
 	zs = {} #{kmer : zscore}
 	for kmer in psis:
 		psi = psis[kmer]
+		if psi == 'NA':
+			zs[kmer] = 'NA'
+			continue
 		GCcount = kmer.count('G') + kmer.count('C')
 		psimean = GCmeandict[GCcount]
 		psisd = GCsddict[GCcount]
