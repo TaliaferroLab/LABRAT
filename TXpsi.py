@@ -82,7 +82,6 @@ def transcriptfilters(transcript, db):
 #It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
 #This is so that you dont end up with unique regions that are like 4 nt long.
 #They might causes issues when it comes to counting kmers or reads that map to a given region.
-#Also, this function is actually getting you m values, not position factors, but it's what we want here
 
 def getpositionfactors(gff, lengthfilter):
 	genecount = 0
@@ -204,7 +203,7 @@ def getpositionfactors(gff, lengthfilter):
 
 
 #Make a fasta file containing the "terminal fragments" of all transcripts
-def makeTFfasta(gff, genomefasta):
+def makeTFfasta(gff, genomefasta, lasttwoexons):
 	TFs = {} #{transcriptid: [chrm, strand, [next to last exon1start, next to last exon1stop], [last exon2start, last exon2stop]]}
 	
 	#Make gff database
@@ -251,44 +250,46 @@ def makeTFfasta(gff, genomefasta):
 					exons.append([exon.start, exon.end])
 
 			#For last two exons
-			#TFs[txname] = [transcript.chrom, transcript.strand, exons[-2], exons[-1]]
+			if lasttwoexons:
+				TFs[txname] = [transcript.chrom, transcript.strand, exons[-2], exons[-1]]
 
 			#For all exons
-			TFs[txname] = [transcript.chrom, transcript.strand]
-			for exon in exons:
-				TFs[txname].append(exon)
+			elif not lasttwoexons:
+				TFs[txname] = [transcript.chrom, transcript.strand]
+				for exon in exons:
+					TFs[txname].append(exon)
 
 	
 	#Get sequences of TFs
-	with open('TFseqs.fasta', 'w') as outfh:
-		for TF in TFs:
-			chrm, strand, exon1, exon2 = TFs[TF]
-			if strand == '+':
-				exon1seq = seq_dict[chrm].seq[exon1[0] - 1:exon1[1]].upper()
-				exon2seq = seq_dict[chrm].seq[exon2[0] - 1:exon2[1]].upper()
-			elif strand == '-':
-				exon1seq = seq_dict[chrm].seq[exon1[0] - 1:exon1[1]].reverse_complement().upper()
-				exon2seq = seq_dict[chrm].seq[exon2[0] - 1:exon2[1]].reverse_complement().upper()
+	if lasttwoexons:
+		with open('TFseqs.fasta', 'w') as outfh:
+			for TF in TFs:
+				chrm, strand, exon1, exon2 = TFs[TF]
+				if strand == '+':
+					exon1seq = seq_dict[chrm].seq[exon1[0] - 1:exon1[1]].upper()
+					exon2seq = seq_dict[chrm].seq[exon2[0] - 1:exon2[1]].upper()
+				elif strand == '-':
+					exon1seq = seq_dict[chrm].seq[exon1[0] - 1:exon1[1]].reverse_complement().upper()
+					exon2seq = seq_dict[chrm].seq[exon2[0] - 1:exon2[1]].reverse_complement().upper()
 
-			TFseq = exon1seq + exon2seq
-			outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
-	'''
+				TFseq = exon1seq + exon2seq
+				outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
 
 	#Get sequences of all exons
-	with open('TFseqs.fasta', 'w') as outfh:
-		for TF in TFs:
-			chrm, strand = TFs[TF][0], TFs[TF][1]
-			exons = TFs[TF][2:]
-			seq = ''
-			for exon in exons:
-				if strand == '+':
-					exonseq = seq_dict[chrm].seq[exon[0] - 1:exon[1]].upper()
-				elif strand == '-':
-					exonseq = seq_dict[chrm].seq[exon[0] - 1:exon[1]].reverse_complement().upper()
+	elif not lasttwoexons:
+		with open('wholetranscriptseqs.fasta', 'w') as outfh:
+			for TF in TFs:
+				chrm, strand = TFs[TF][0], TFs[TF][1]
+				exons = TFs[TF][2:]
+				seq = ''
+				for exon in exons:
+					if strand == '+':
+						exonseq = seq_dict[chrm].seq[exon[0] - 1:exon[1]].upper()
+					elif strand == '-':
+						exonseq = seq_dict[chrm].seq[exon[0] - 1:exon[1]].reverse_complement().upper()
 
-				seq += exonseq
-			outfh.write('>' + TF + '\n' + str(seq) + '\n')
-	'''
+					seq += exonseq
+				outfh.write('>' + TF + '\n' + str(seq) + '\n')
 
 def runSalmon(transcriptfasta, threads, reads1, reads2, samplename):
 	#transcriptfasta should probably be 'TFseqs.fasta' produced by makeTFfasta
@@ -390,12 +391,9 @@ def getdpsis(psifile):
 		'Mbnl1KO_neurite2', 'Mbnl2KO_neurite1', 'Mbnl2KO_neurite2', 'Mbnlkd_neurite1', 'Mbnlkd_neurite2', 'Mbnlkd_neurite3', 'N2ANeurite2', 'N2ANeurite3',
 		'PeriphAxon1', 'PeriphAxon2', 'SKOWT_neurite1', 'SKOWT_neurite2', 'WTAxonA', 'WTAxonB', 'WTAxonC']})
 	
-
+	'''
 	samp_conds = OrderedDict({'cond1' : ['WTSomaA', 'WTSomaB', 'WTSomaC', 'KOSomaA', 'KOSomaB', 'KOSomaC'],
 		'cond2' : ['WTAxonA', 'WTAxonB', 'WTAxonC', 'KOAxonA', 'KOAxonB', 'KOAxonC']})
-
-	'''
-	samp_conds = OrderedDict({'cond1': ['HMLE-3PR', 'HMLE-3PRP'], 'cond2' : ['HMLERAS-3PR', 'HMLERAS-3PRP']})
 
 	#Get a list of all samples
 	samps = []

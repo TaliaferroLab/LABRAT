@@ -83,7 +83,6 @@ def transcriptfilters(transcript, db):
 #It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
 #This is so that you dont end up with unique regions that are like 4 nt long.
 #They might causes issues when it comes to counting kmers or reads that map to a given region.
-#Also, this function is actually getting you m values, not position factors, but it's what we want here
 
 def getpositionfactors(gff, lengthfilter):
 	genecount = 0
