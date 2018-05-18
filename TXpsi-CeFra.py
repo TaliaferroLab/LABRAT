@@ -509,8 +509,8 @@ if __name__ == '__main__':
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
 		for sd in salmondirs:
-			#samplename = os.path.basename(sd)
-			samplename = os.path.basename(sd).split('ML-DmD17-c3_')[1]
+			samplename = os.path.basename(sd)
+			#samplename = os.path.basename(sd).split('ML-DmD17-c3_')[1]
 			psis = calculatepsi(positionfactors, sd)
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)

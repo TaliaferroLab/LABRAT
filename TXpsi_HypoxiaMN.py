@@ -190,7 +190,7 @@ def getpositionfactors(gff, lengthfilter):
 			passtranscriptfilters = transcriptfilters(transcript, db)
 			if passtranscriptfilters == False:
 				continue
-			txname = str(transcript.id).replace('transcript:', '')
+			txname = str(transcript.id).replace('transcript:', '').split('.')[0]
 			if gene.strand == '+':
 				#m = possibleends.index(transcript.end)
 				m = mvalues[genename][transcript.end]
@@ -415,10 +415,16 @@ def getdpsis(psifile):
 
 	#cond1 = soma, cond2 = neurite
 
-	samp_conds = OrderedDict({'cond1': ['GFPctrlSomaA', 'GFPctrlSomaB', 'GFPctrlSomaC', 'GFPhypoxiaSomaA', 'GFPhypoxiaSomaB', 'GFPhypoxiaSomaC',
-		'T1DctrlSomaA', 'T1DctrlSomaB', 'T1DctrlSomaC', 'T1DhypoxiaSomaA', 'T1DhypoxiaSomaB', 'T1DhypoxiaSomaC'], 
-		'cond2' : ['GFPctrlNeuriteA', 'GFPctrlNeuriteB', 'GFPctrlNeuriteC', 'GFPhypoxiaNeuriteA', 'GFPhypoxiaNeuriteB', 'GFPhypoxiaNeuriteC',
-		'T1DctrlNeuriteA', 'T1DctrlNeuriteB', 'T1DCtrlNeuriteC', 'T1DhypoxiaNeuriteA', 'T1DhypoxiaNeuriteB', 'T1DhypoxiaNeuriteC']})
+	#samp_conds = OrderedDict({'cond1': ['GFPctrlSomaA', 'GFPctrlSomaB', 'GFPctrlSomaC', 'GFPhypoxiaSomaA', 'GFPhypoxiaSomaB', 'GFPhypoxiaSomaC',
+		#'T1DctrlSomaA', 'T1DctrlSomaB', 'T1DctrlSomaC', 'T1DhypoxiaSomaA', 'T1DhypoxiaSomaB', 'T1DhypoxiaSomaC'], 
+		#'cond2' : ['GFPctrlNeuriteA', 'GFPctrlNeuriteB', 'GFPctrlNeuriteC', 'GFPhypoxiaNeuriteA', 'GFPhypoxiaNeuriteB', 'GFPhypoxiaNeuriteC',
+		#'T1DctrlNeuriteA', 'T1DctrlNeuriteB', 'T1DctrlNeuriteC', 'T1DhypoxiaNeuriteA', 'T1DhypoxiaNeuriteB', 'T1DhypoxiaNeuriteC']})
+
+	#samp_conds = OrderedDict({'cond1': ['GFPctrlSomaA', 'GFPctrlSomaB', 'GFPctrlSomaC', 'GFPhypoxiaSomaA', 'GFPhypoxiaSomaB', 'GFPhypoxiaSomaC'], 
+		#'cond2' : ['GFPctrlNeuriteA', 'GFPctrlNeuriteB', 'GFPctrlNeuriteC', 'GFPhypoxiaNeuriteA', 'GFPhypoxiaNeuriteB', 'GFPhypoxiaNeuriteC']})
+
+	samp_conds = OrderedDict({'cond1': ['GFPctrlSomaA', 'GFPctrlSomaB', 'GFPctrlSomaC'], 
+		'cond2' : ['GFPctrlNeuriteA', 'GFPctrlNeuriteB', 'GFPctrlNeuriteC']})
 
 	#Get a list of all samples
 	samps = []
