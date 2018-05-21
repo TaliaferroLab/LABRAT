@@ -84,6 +84,7 @@ def transcriptfilters(transcript, db):
 #They might causes issues when it comes to counting kmers or reads that map to a given region.
 
 def getpositionfactors(gff, lengthfilter):
+	lengthfilter = int(lengthfilter)
 	genecount = 0
 	txends = {} #{ENSMUSG : [strand, [list of distinct transcript end coords]]}
 	posfactors = {} #{ENSMUSG : {ENSMUST : positionfactor}}
@@ -478,6 +479,7 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'LME'])
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
+	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
 	parser.add_argument('--reads1', type = str, help = 'Comma separated list of forward read fastq files. Needed for runSalmon.')
 	parser.add_argument('--reads2', type = str, help = 'Comma separated list of reverse read fastq files. Needed for runSalmon.')
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
@@ -487,7 +489,7 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	if args.mode == 'makeTFfasta':
-		makeTFfasta(args.gff, args.genomefasta)
+		makeTFfasta(args.gff, args.genomefasta, args.lasttwoexons)
 
 	elif args.mode == 'runSalmon':
 		forreads = args.reads1.split(',')
@@ -505,7 +507,7 @@ if __name__ == '__main__':
 
 	elif args.mode == 'calculatepsi':
 		print 'Calculating position factors for every transcript...'
-		positionfactors = getpositionfactors(args.gff)
+		positionfactors = getpositionfactors(args.gff, 25)
 		print 'Done with position factors!'
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
@@ -522,7 +524,7 @@ if __name__ == '__main__':
 			psidf.columns = ['Gene', samplename]
 			psidfs.append(psidf)
 		bigpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), psidfs)
-		bigpsidf.to_csv('ENCODEpsis.3end.txt', sep = '\t', index = False)
+		bigpsidf.to_csv('LABRATpsis.3end.txt', sep = '\t', index = False)
 
 	elif args.mode == 'LME':
 		getdpsis(args.psifile)
