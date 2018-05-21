@@ -67,10 +67,9 @@ def transcriptfilters(transcript, db):
 
 	#Is this transcript protein coding
 	#Not used in Drosophila
-	'''
 	if 'protein_coding' in transcript.attributes['transcript_type']:
 		proteincoding = True
-	'''
+	
 
 	#Are we confident in the 3' end of this mrnaendpass
 	if 'tag' not in transcript.attributes or 'mRNA_end_NF' not in transcript.attributes['tag']:
@@ -83,8 +82,13 @@ def transcriptfilters(transcript, db):
 
 
 #Given an annotation in gff format, get the position factors for all transcripts.
+#THIS IS AN UPDATED GETPOSITIONFACTORS FUNCTION
+#It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
+#This is so that you dont end up with unique regions that are like 4 nt long.
+#They might causes issues when it comes to counting kmers or reads that map to a given region.
 
-def getpositionfactors(gff):
+def getpositionfactors(gff, lengthfilter):
+	lengthfilter = int(lengthfilter)
 	genecount = 0
 	txends = {} #{ENSMUSG : [strand, [list of distinct transcript end coords]]}
 	posfactors = {} #{ENSMUSG : {ENSMUST : positionfactor}}
@@ -100,12 +104,8 @@ def getpositionfactors(gff):
 	print 'Done indexing!'
 
 	#Get number of distinct transcript ends for each gene
-	genecount = 0
 	genes = db.features_of_type('gene')
 	for gene in genes:
-		genecount +=1
-		if genecount % 1000 == 0:
-			print 'Gene {0}...'.format(genecount)
 		#Only protein coding genes
 		passgenefilters = genefilters(gene, db)
 		if passgenefilters == False:
@@ -134,7 +134,6 @@ def getpositionfactors(gff):
 
 	#Sort transcript end coords
 	s_txends = {} #{ENSMUSG : [sorted (most upstream to most downstream) tx end coords]}
-	genecount = 0
 	for gene in txends:
 		strand = txends[gene][0]
 		coords = txends[gene][1]
@@ -144,35 +143,69 @@ def getpositionfactors(gff):
 			sortedcoords = sorted(coords, reverse = True)
 		s_txends[gene] = sortedcoords
 
+	#Get m values (the numerator of the position factor fraction), combining an end that is less than <lengthfilter> nt away from
+	#the previous utr into the same m value as the previous utr
+
+	mvalues = {} #{ENSMUSG : {txendcoord : mvalue}}
+	for gene in s_txends:
+		mvalues[gene] = {}
+		currentendcoord = s_txends[gene][0]
+		currentmvalue = 0
+		mvalues[gene][currentendcoord] = 0 #the first one has to have m = 0
+		for endcoord in s_txends[gene][1:]:
+			#If this endcoord is too close to the last one
+			if abs(endcoord - currentendcoord) <= lengthfilter:
+				#this end gets the current m value
+				mvalues[gene][endcoord] = currentmvalue
+				#we stay on this m value for the next round
+				currentmvalue = currentmvalue
+				#update currentendcoord
+				currentendcoord = endcoord
+			#If this endcoord is sufficiently far away from the last one
+			elif abs(endcoord - currentendcoord) > lengthfilter:
+				#this end coord gets the next m value
+				mvalues[gene][endcoord] = currentmvalue + 1
+				#we move on to the next m value for the next round
+				currentmvalue = currentmvalue + 1
+				#update currentendcoord
+				currentendcoord = endcoord
+
 
 	#Figure out postion scaling factor for each transcript (position / (number of total positions - 1)) (m / (n - 1))
 	genes = db.features_of_type('gene')
-	genecount = 0
 	for gene in genes:
+		genecount +=1
 		genename = str(gene.id).replace('gene:', '')
 		#Only protein coding genes
 		passgenefilters = genefilters(gene, db)
 		if passgenefilters == False:
 			continue
-		if genename not in s_txends or len(s_txends[genename]) == 1:
+		#If this gene isnt in mvalues or there is only one m value for the entire gene, skip it
+		if genename not in mvalues:
 			continue
-		n = len(s_txends[genename])
-		possibleends = s_txends[genename]
+		if len(set(mvalues[genename].values())) == 1:
+			continue
+		#Get number of different m values for this gene
+		n = len(set(mvalues[genename].values()))
 		posfactors[genename] = {}
 		for transcript in db.children(gene, featuretype = 'transcript', level = 1, order_by = 'end'):
 			#Skip transcripts that do not pass filters
 			passtranscriptfilters = transcriptfilters(transcript, db)
 			if passtranscriptfilters == False:
 				continue
-			txname = str(transcript.id).replace('transcript:', '').split('.')[0]
+			txname = str(transcript.id).replace('transcript:', '')
 			if gene.strand == '+':
-				m = possibleends.index(transcript.end)
+				#m = possibleends.index(transcript.end)
+				m = mvalues[genename][transcript.end]
 			elif gene.strand == '-':
-				m = possibleends.index(transcript.start)
+				#m = possibleends.index(transcript.start)
+				m = mvalues[genename][transcript.start]
 			posfactor = m / float(n - 1)
 			posfactors[genename][txname] = posfactor
+			#posfactors[genename][txname] = m
 
 	return posfactors
+
 
 
 #Make a fasta file containing the "terminal fragments" of all transcripts
@@ -498,7 +531,7 @@ if __name__ == '__main__':
 
 	elif args.mode == 'calculatepsi':
 		print 'Calculating position factors for every transcript...'
-		positionfactors = getpositionfactors(args.gff)
+		positionfactors = getpositionfactors(args.gff, 25)
 		genecount = len(positionfactors)
 		txcount = 0
 		for gene in positionfactors:
