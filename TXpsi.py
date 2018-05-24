@@ -331,7 +331,7 @@ def calculatepsi(positionfactors, salmondir):
 			#Skip header
 			if line[0] == 'Name':
 				continue
-			transcriptid = str(line[0])
+			transcriptid = str(line[0]).split('.')[0]
 			tpm = float(line[3])
 			txtpms[transcriptid] = tpm
 
@@ -340,7 +340,7 @@ def calculatepsi(positionfactors, salmondir):
 		genetpms[gene] = []
 		posfactorgenetpms[gene] = []
 		for transcript in positionfactors[gene]:
-			txtpm = txtpms[transcript]
+			txtpm = txtpms[transcript.split('.')[0]]
 			genetpms[gene].append(txtpm)
 			posfactor = positionfactors[gene][transcript]
 			posfactorgenetpms[gene].append(txtpm * posfactor)
@@ -393,8 +393,8 @@ def getdpsis(psifile):
 		'PeriphAxon1', 'PeriphAxon2', 'SKOWT_neurite1', 'SKOWT_neurite2', 'WTAxonA', 'WTAxonB', 'WTAxonC']})
 	
 	'''
-	samp_conds = OrderedDict({'cond1' : ['WTSomaA', 'WTSomaB', 'WTSomaC', 'KOSomaA', 'KOSomaB', 'KOSomaC'],
-		'cond2' : ['WTAxonA', 'WTAxonB', 'WTAxonC', 'KOAxonA', 'KOAxonB', 'KOAxonC']})
+	samp_conds = OrderedDict({'cond1' : ['DRG1', 'DRG2'],
+		'cond2' : ['PeriphAxon1', 'PeriphAxon2']})
 
 	#Get a list of all samples
 	samps = []

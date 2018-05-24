@@ -478,8 +478,8 @@ if __name__ == '__main__':
 	elif args.mode == 'pval_oneline':
 		hepg2lmepdf = getlmep_singlecellline(hepg2df)
 		hepg2lmepdf.to_csv('HepG2.psi.pval.txt', sep = '\t', header = True, index = False)
-		k562lmepdf = getlmep_singlecellline(k562df)
-		k562lmepdf.to_csv('K562.psi.pval.txt', sep = '\t', header = True, index = False)
+		#k562lmepdf = getlmep_singlecellline(k562df)
+		#k562lmepdf.to_csv('K562.psi.pval.txt', sep = '\t', header = True, index = False)
 
 	elif args.mode == 'pval_twolines':
 		pvaluedf = getlmepdf_twocelllines(psidf)

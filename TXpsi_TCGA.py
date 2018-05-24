@@ -72,8 +72,13 @@ def transcriptfilters(transcript, db):
 
 
 #Given an annotation in gff format, get the position factors for all transcripts.
+#THIS IS AN UPDATED GETPOSITIONFACTORS FUNCTION
+#It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
+#This is so that you dont end up with unique regions that are like 4 nt long.
+#They might causes issues when it comes to counting kmers or reads that map to a given region.
 
-def getpositionfactors(gff):
+def getpositionfactors(gff, lengthfilter):
+	lengthfilter = int(lengthfilter)
 	genecount = 0
 	txends = {} #{ENSMUSG : [strand, [list of distinct transcript end coords]]}
 	posfactors = {} #{ENSMUSG : {ENSMUST : positionfactor}}
@@ -128,6 +133,33 @@ def getpositionfactors(gff):
 			sortedcoords = sorted(coords, reverse = True)
 		s_txends[gene] = sortedcoords
 
+	#Get m values (the numerator of the position factor fraction), combining an end that is less than <lengthfilter> nt away from
+	#the previous utr into the same m value as the previous utr
+
+	mvalues = {} #{ENSMUSG : {txendcoord : mvalue}}
+	for gene in s_txends:
+		mvalues[gene] = {}
+		currentendcoord = s_txends[gene][0]
+		currentmvalue = 0
+		mvalues[gene][currentendcoord] = 0 #the first one has to have m = 0
+		for endcoord in s_txends[gene][1:]:
+			#If this endcoord is too close to the last one
+			if abs(endcoord - currentendcoord) <= lengthfilter:
+				#this end gets the current m value
+				mvalues[gene][endcoord] = currentmvalue
+				#we stay on this m value for the next round
+				currentmvalue = currentmvalue
+				#update currentendcoord
+				currentendcoord = endcoord
+			#If this endcoord is sufficiently far away from the last one
+			elif abs(endcoord - currentendcoord) > lengthfilter:
+				#this end coord gets the next m value
+				mvalues[gene][endcoord] = currentmvalue + 1
+				#we move on to the next m value for the next round
+				currentmvalue = currentmvalue + 1
+				#update currentendcoord
+				currentendcoord = endcoord
+
 
 	#Figure out postion scaling factor for each transcript (position / (number of total positions - 1)) (m / (n - 1))
 	genes = db.features_of_type('gene')
@@ -138,23 +170,29 @@ def getpositionfactors(gff):
 		passgenefilters = genefilters(gene, db)
 		if passgenefilters == False:
 			continue
-		if genename not in s_txends or len(s_txends[genename]) == 1:
+		#If this gene isnt in mvalues or there is only one m value for the entire gene, skip it
+		if genename not in mvalues:
 			continue
-		n = len(s_txends[genename])
-		possibleends = s_txends[genename]
+		if len(set(mvalues[genename].values())) == 1:
+			continue
+		#Get number of different m values for this gene
+		n = len(set(mvalues[genename].values()))
 		posfactors[genename] = {}
 		for transcript in db.children(gene, featuretype = 'transcript', level = 1, order_by = 'end'):
 			#Skip transcripts that do not pass filters
 			passtranscriptfilters = transcriptfilters(transcript, db)
 			if passtranscriptfilters == False:
 				continue
-			txname = str(transcript.id).replace('transcript:', '').split('.')[0]
+			txname = str(transcript.id).replace('transcript:', '')
 			if gene.strand == '+':
-				m = possibleends.index(transcript.end)
+				#m = possibleends.index(transcript.end)
+				m = mvalues[genename][transcript.end]
 			elif gene.strand == '-':
-				m = possibleends.index(transcript.start)
+				#m = possibleends.index(transcript.start)
+				m = mvalues[genename][transcript.start]
 			posfactor = m / float(n - 1)
 			posfactors[genename][txname] = posfactor
+			#posfactors[genename][txname] = m
 
 	return posfactors
 
@@ -186,7 +224,7 @@ def calculatepsi_singlesample(positionfactors, salmondir):
 		genetpms[gene] = []
 		posfactorgenetpms[gene] = []
 		for transcript in positionfactors[gene]:
-			txtpm = txtpms[transcript]
+			txtpm = txtpms[transcript.split('.')[0]]
 			genetpms[gene].append(txtpm)
 			posfactor = positionfactors[gene][transcript]
 			posfactorgenetpms[gene].append(txtpm * posfactor)
@@ -207,7 +245,7 @@ def calculatepsi_singlesample(positionfactors, salmondir):
 #Output a psi value table
 def calculatepsi_multisample(gff, salmondir):
 	print 'Calculating position factors for every transcript...'
-	positionfactors = getpositionfactors(gff)
+	positionfactors = getpositionfactors(gff, 25)
 	print 'Done with position factors!'
 	salmondirs = [os.path.join(os.path.abspath(salmondir), d) for d in os.listdir(salmondir) if os.path.isdir(os.path.join(os.path.abspath(salmondir), d)) and d.endswith('_salmon')]
 	psidfs = []

@@ -67,8 +67,10 @@ def transcriptfilters(transcript, db):
 
 	#Is this transcript protein coding
 	#Not used in Drosophila
+	'''
 	if 'protein_coding' in transcript.attributes['transcript_type']:
 		proteincoding = True
+	'''
 	
 
 	#Are we confident in the 3' end of this mrnaendpass
@@ -311,7 +313,7 @@ def calculatepsi(positionfactors, salmondir):
 			#Skip header
 			if line[0] == 'Name':
 				continue
-			transcriptid = str(line[0])
+			transcriptid = str(line[0]).split('.')[0]
 			tpm = float(line[3])
 			txtpms[transcriptid] = tpm
 
@@ -320,7 +322,7 @@ def calculatepsi(positionfactors, salmondir):
 		genetpms[gene] = []
 		posfactorgenetpms[gene] = []
 		for transcript in positionfactors[gene]:
-			txtpm = txtpms[transcript]
+			txtpm = txtpms[transcript.split('.')[0]]
 			genetpms[gene].append(txtpm)
 			posfactor = positionfactors[gene][transcript]
 			posfactorgenetpms[gene].append(txtpm * posfactor)
@@ -542,8 +544,8 @@ if __name__ == '__main__':
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
 		for sd in salmondirs:
-			samplename = os.path.basename(sd)
-			#samplename = os.path.basename(sd).split('ML-DmD17-c3_')[1]
+			#samplename = os.path.basename(sd)
+			samplename = ('_').join(os.path.basename(sd).split('_')[1:])
 			psis = calculatepsi(positionfactors, sd)
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)
