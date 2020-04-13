@@ -9,15 +9,10 @@ import argparse
 import subprocess
 import pandas as pd
 from collections import OrderedDict
-#from rpy2.robjects.packages import importr
-#from rpy2.robjects import pandas2ri, Formula, FloatVector
-#from rpy2.rinterface import RRuntimeError
+from rpy2.robjects.packages import importr
+from rpy2.robjects import pandas2ri, Formula, FloatVector
+from rpy2.rinterface import RRuntimeError
 import math
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from statsmodels.stats.multitest import multipletests
-from scipy.stats.distributions import chi2
-import warnings
 
 
 
@@ -33,7 +28,7 @@ import warnings
 def genefilters(gene, db):
 	proteincoding = True #don't want this filter
 
-	if 'protein_coding' in gene.attributes['gene_type']:
+	if 'protein_coding' in gene.attributes['biotype']:
 		proteincoding = True
 
 	if proteincoding == True:
@@ -46,7 +41,7 @@ def genefilters(gene, db):
 def transcriptfilters(transcript, db):
 	exonnumberpass = False
 	TFlengthpass = False
-	proteincoding = False 
+	proteincoding = False #don't want this filter #turned on for now
 	mrnaendpass = False
 	#How many exons does it have
 	if len(list(db.children(transcript, featuretype = 'exon'))) >= 2:
@@ -69,7 +64,7 @@ def transcriptfilters(transcript, db):
 		TFlengthpass = True
 
 	#Is this transcript protein coding
-	if 'protein_coding' in transcript.attributes['transcript_type']:
+	if 'protein_coding' in transcript.attributes['biotype']:
 		proteincoding = True
 
 	#Are we confident in the 3' end of this mrnaendpass
@@ -83,6 +78,7 @@ def transcriptfilters(transcript, db):
 
 
 #Given an annotation in gff format, get the position factors for all transcripts.
+#THIS IS AN UPDATED GETPOSITIONFACTORS FUNCTION
 #It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
 #This is so that you dont end up with unique regions that are like 4 nt long.
 #They might causes issues when it comes to counting kmers or reads that map to a given region.
@@ -307,17 +303,26 @@ def makeTFfasta(gff, genomefasta, lasttwoexons):
 					seq += exonseq
 				outfh.write('>' + TF + '\n' + str(seq) + '\n')
 
-def runSalmon(threads, reads1, reads2, samplename):
+def runSalmon(transcriptfasta, threads, reads1, reads2, samplename):
+	#transcriptfasta should probably be 'TFseqs.fasta' produced by makeTFfasta
+	#index transcripts if index does not already exist
+	if os.path.exists('/vol3/home/taliaferro/data/TXpsi/DisallowNonCodingTx/TFseqs.hg38.idx') == False:
+		command = ['salmon', 'index', '-t', transcriptfasta, '-i', '/vol3/home/taliaferro/data/TXpsi/DisallowNonCodingTx/TFseqs.hg38.idx', '--type', 'quasi', '-k', '31', '--keepDuplicates']
+		print 'Indexing transcripts...'
+		subprocess.call(command)
+		print 'Done indexing!'
+
 	#paired end
 	if reads2:
 		print 'Running salmon for {0}...'.format(samplename)
-		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', 'txfasta.idx']
+		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', '/vol3/home/taliaferro/data/TXpsi/DisallowNonCodingTx/TFseqs.hg38.idx']
+		#command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', '/vol3/home/taliaferro/Annotations/dm6/dm6.entiretranscript.idx/']
 
 	#Single end
 	elif not reads2:
 		fldMean = '250' #fragment length distribution mean
 		fldSD = '20' #fragment length distribution standard deviation	
-		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--fldMean', fldMean, '--fldSD', fldSD, '--seqBias', '-r', reads1, '-o', samplename, '--index', 'txfasta.idx']
+		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--fldMean', fldMean, '--fldSD', fldSD, '--seqBias', '-r', reads1, '-o', samplename, '--index', '/vol3/home/taliaferro/data/TXpsi/DisallowNonCodingTx/TFseqs.hg38.idx']
 
 	subprocess.call(command)
 
@@ -355,128 +360,13 @@ def calculatepsi(positionfactors, salmondir):
 	for gene in posfactorgenetpms:
 		scaledtpm = sum(posfactorgenetpms[gene])
 		totaltpm = sum(genetpms[gene])
-		if totaltpm >= 5:
-			psi = scaledtpm / float(totaltpm)
-			psis[gene] = float(format(psi, '.3f'))
+		if totaltpm > 5:
+			psi = round(scaledtpm / float(totaltpm), 4)
+			psis[gene] = psi
 		else:
-			#psis[gene] = 'NA'
-			psis[gene] = np.nan
+			psis[gene] = 'NA'
 
 	return psis
-
-def getdpsis_python(psifile, samp_conds_file):
-	#Given a table of psis, calculate dpsis and LME-based p values
-	deltapsidict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with df
-	pvaluedict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with q values
-
-	psidf = pd.read_csv(psifile, sep = '\t', header = 0, index_col = False)
-
-	cond1samps = []
-	cond2samps = []
-	with open(samp_conds_file, 'r') as infh:
-		for line in infh:
-			line = line.strip().split('\t')
-			cond1samps.append(line[0])
-			cond2samps.append(line[1])
-
-	print 'Condition 1 samples: ' + (', ').join(cond1samps)
-	print 'Condition 2 samples: ' + (', ').join(cond2samps)
-
-	#Store relationships of conditions and the samples in that condition
-	#It's important that this dictionary be ordered because we are going to be iterating through it
-	samp_conds = OrderedDict({'cond1' : cond1samps, 'cond2' : cond2samps})
-
-	#Get a list of all samples
-	samps = []
-	for cond in samp_conds:
-		samps += samp_conds[cond]
-
-	#Iterate through rows, making a dictionary from every row, turning it into a dataframe, then calculating p value
-	genecounter = 0
-	for index, row in psidf.iterrows():
-		genecounter +=1
-		if genecounter % 1000 == 0:
-			print 'Calculating pvalue for gene {0}...'.format(genecounter)
-		
-		d = {}
-		d['Gene'] = [row['Gene']] * len(samps)
-		d['variable'] = samps
-		
-		values = [] #psi values
-		for cond in samp_conds:
-			for sample in samp_conds[cond]:
-				value = row[sample]
-				values.append(value)
-		d['value'] = values
-		
-		conds = []
-		for cond in samp_conds:
-			conds += [cond] * len(samp_conds[cond])
-		cond1s = []
-		cond2s = []
-		for cond in conds:
-			if cond == 'cond1':
-				cond1s.append(1)
-				cond2s.append(0)
-			elif cond == 'cond2':
-				cond1s.append(0)
-				cond2s.append(1)
-		d['cond1'] = cond1s #e.g. [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
-		d['cond2'] = cond2s #e.g. [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]
-
-		d['samples'] = [x + 1 for x in range(len(samps))]
-
-		#Turn this dictionary into a DataFrame
-		rowdf = pd.DataFrame.from_dict(d)
-
-		#delta psi is difference between mean psi of two conditions (cond2 - cond1)
-		cond1meanpsi = float(format(np.mean(rowdf.query('cond1 == 1').value.dropna()), '.3f'))
-		cond2meanpsi = float(format(np.mean(rowdf.query('cond2 == 1').value.dropna()), '.3f'))
-		deltapsi = cond2meanpsi - cond1meanpsi
-		deltapsi = float(format(deltapsi, '.3f'))
-		deltapsidict[row['Gene']] = deltapsi
-
-		#Get LME pvalue
-		#Lots of warnings about convergence, etc. Suppress them.
-		with warnings.catch_warnings():
-			warnings.filterwarnings('ignore')
-
-			try:
-				#actual model
-				md = smf.mixedlm('value ~ cond1', data = rowdf, groups = 'cond1', missing = 'drop')
-				mdf = md.fit(reml = False) #REML needs to be false in order to use log-likelihood for pvalue calculation
-
-				#null model
-				nullmd = smf.mixedlm('value ~ 1', data = rowdf, groups = 'samples', missing = 'drop')
-				nullmdf = nullmd.fit(reml = False)
-
-				#Likelihood ratio
-				LR = 2 * (mdf.llf - nullmdf.llf)
-				p = chi2.sf(LR, df = 1)
-				if math.isnan(p):
-					p = 1
-			#These exceptions are needed to catch cases where either all psi values are nan (valueerror) or all psi values for one condition are nan (linalgerror)
-			except (ValueError, np.linalg.LinAlgError):
-				p = 1
-
-			pvaluedict[row['Gene']] = float('{:.2e}'.format(p))
-
-	#Correct pvalues using BH method
-	pvalues = list(pvaluedict.values())
-	fdrs = list(multipletests(pvalues, method = 'fdr_bh')[1])
-	fdrs = [float('{:.2e}'.format(fdr)) for fdr in fdrs]
-
-	#Add deltapsis, pvalues, and FDRs to df
-	deltapsis = list(deltapsidict.values())
-	psidf = psidf.assign(deltapsi = deltapsis)
-	psidf = psidf.assign(pval = pvalues)
-	psidf = psidf.assign(FDR = fdrs)
-
-	#Write df
-	fn = os.path.abspath(psifile) + '.python.pval'
-	psidf.to_csv(fn, sep = '\t', index = False)
-
-
 
 def getdpsis(psifile):
 	#Given a table of psis, calculate dpsis and LME-based p values
@@ -503,8 +393,19 @@ def getdpsis(psifile):
 
 	#Store relationships of conditions and the samples in that condition
 	#It's important that this dictionary be ordered because we are going to be iterating through it
-	samp_conds = OrderedDict({'cond1' : ['ER1', 'ER2', 'ER3'],
-		'cond2' : ['Cytosol1', 'Cytosol2', 'Cytosol3']})
+	'''
+	samp_conds = OrderedDict({'cond1': ['CADSoma1', 'CADSoma2', 'CADSoma3', 'Ctrlkd_soma1', 'Ctrlkd_soma2', 'Ctrlkd_soma3', 'DKOKO_neurite1', 'DKOKO_neurite2',
+		'DKOWT_neurite1', 'DKOWT_neurite2', 'DRG1', 'DRG2', 'Hr0Soma1', 'Hr0Soma2', 'Hr12Soma1', 'Hr12Soma2', 'KOSomaA', 'KOSomaB', 'KOSomaC', 'Mbnl1KO_soma1',
+		'Mbnl1KO_soma2', 'Mbnl2KO_soma1', 'Mbnl2KO_soma2', 'Mbnlkd_soma1', 'Mbnlkd_soma2', 'Mbnlkd_soma3', 'N2ASoma2', 'N2ASoma3', 'SKOWT_soma1', 'SKOWT_soma2',
+		'WTSomaA', 'WTSomaB', 'WTSomaC'],
+		'cond2' : ['CADNeurite1', 'CADNeurite2', 'CADNeurite3', 'Ctrlkd_neurite1', 'Ctrlkd_neurite2', 'Ctrlkd_neurite3', 'DKOKO_soma1', 'DKOKO_soma2', 
+		'DKOWT_soma1', 'DKOWT_soma2', 'Hr0Neurite1', 'Hr0Neurite2', 'Hr12Neurite1', 'Hr12Neurite2', 'KOAxonA', 'KOAxonB', 'KOAxonC', 'Mbnl1KO_neurite1', 
+		'Mbnl1KO_neurite2', 'Mbnl2KO_neurite1', 'Mbnl2KO_neurite2', 'Mbnlkd_neurite1', 'Mbnlkd_neurite2', 'Mbnlkd_neurite3', 'N2ANeurite2', 'N2ANeurite3',
+		'PeriphAxon1', 'PeriphAxon2', 'SKOWT_neurite1', 'SKOWT_neurite2', 'WTAxonA', 'WTAxonB', 'WTAxonC']})
+	
+	'''
+	samp_conds = OrderedDict({'cond1' : ['CaperYoungA', 'CaperYoungB'],
+		'cond2' : ['CtrlYoungA', 'CtrlYoungB', 'CtrlYoungC']})
 
 	#Get a list of all samples
 	samps = []
@@ -608,7 +509,7 @@ def getexoniccoords(posfactors, gff):
 		for tx in txs:
 			txexons = []
 			pf = posfactors[gene][tx]
-			tx = db[tx]
+			tx = db['transcript:' + tx]
 			if tx.strand == '+':
 				for exon in db.children(tx, featuretype = 'exon', order_by = 'start'):
 					txexons += range(exon.start, exon.end + 1)
@@ -705,14 +606,12 @@ if __name__ == '__main__':
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
-	parser.add_argument('--txfasta', type = str, help = 'Fasta file of sequences to quantitate with salmon. Often the output of makeTFfasta mode.')
 	parser.add_argument('--reads1', type = str, help = 'Comma separated list of forward read fastq files. Needed for runSalmon.')
 	parser.add_argument('--reads2', type = str, help = 'Comma separated list of reverse read fastq files. Needed for runSalmon.')
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
 	parser.add_argument('--psifile', type = str, help = 'Psi value table. Needed for LME.')
-	parser.add_argument('--sampconds', type = str, help = 'File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
 	args = parser.parse_args()
 
 	if args.mode == 'makeTFfasta':
@@ -726,22 +625,17 @@ if __name__ == '__main__':
 			print 'Need the same number of forward reads, reverse reads, and sample names!'
 			sys.exit()
 
-		command = ['salmon', 'index', '-t', args.txfasta, '-i', 'txfasta.idx', '--type', 'quasi', '-k', '31']
-		print 'Indexing transcripts...'
-		subprocess.call(command)
-		print 'Done indexing!'
-
 		for i in range(len(forreads)):
 			freads = forreads[i]
 			rreads = revreads[i]
 			samplename = samplenames[i]
-			runSalmon(args.threads, freads, rreads, samplename)
+			runSalmon('/vol3/home/taliaferro/data/TXpsi/DisallowNonCodingTx/TFseqs.hg38.fa', args.threads, freads, rreads, samplename)
 
 	elif args.mode == 'calculatepsi':
 		print 'Calculating position factors for every transcript...'
 		positionfactors = getpositionfactors(args.gff, 25)
 		print 'Done with position factors!'
-		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d)) and d != 'txfasta.idx']
+		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d))]
 		psidfs = []
 		for sd in salmondirs:
 			samplename = os.path.basename(sd)
@@ -767,7 +661,7 @@ if __name__ == '__main__':
 		finalpsidf.to_csv('LABRATpsis.3end.txt', sep = '\t', index = False)
 
 	elif args.mode == 'LME':
-		getdpsis_python(args.psifile, args.sampconds)
+		getdpsis(args.psifile)
 
 
 		

@@ -34,7 +34,7 @@ def genefilters(gene, db):
 def transcriptfilters(transcript, db):
 	exonnumberpass = False
 	TFlengthpass = False
-	proteincoding = True #don't want this filter
+	proteincoding = False #don't want this filter #turned on for now
 	mrnaendpass = False #don't want this filter (for drosophila samples)
 	#How many exons does it have
 	if len(list(db.children(transcript, featuretype = 'exon'))) >= 2:
@@ -247,7 +247,7 @@ def calculatepsi_multisample(gff, salmondir):
 	print 'Calculating position factors for every transcript...'
 	positionfactors = getpositionfactors(gff, 25)
 	print 'Done with position factors!'
-	salmondirs = [os.path.join(os.path.abspath(salmondir), d) for d in os.listdir(salmondir) if os.path.isdir(os.path.join(os.path.abspath(salmondir), d)) and d.endswith('_salmon')]
+	salmondirs = [os.path.join(os.path.abspath(salmondir), d) for d in os.listdir(salmondir) if os.path.isdir(os.path.join(os.path.abspath(salmondir), d)) and d.endswith('_salmon_rna')]
 	psidfs = []
 	samplenames = []
 	for sd in salmondirs:
@@ -300,7 +300,7 @@ def getdpsis(salmondir):
 	psidf = psidf.dropna(axis=0)
 
 	#Get name of normal sample names and tumor sample names
-	salmondirs = [os.path.basename(d) for d in os.listdir(salmondir) if os.path.isdir(os.path.join(os.path.abspath(salmondir), d)) and d.endswith('_salmon')]
+	salmondirs = [os.path.basename(d) for d in os.listdir(salmondir) if os.path.isdir(os.path.join(os.path.abspath(salmondir), d)) and d.endswith('_salmon_rna')]
 	samplenames = [s.split('_')[0] for s in salmondirs]
 	normalnames = [sample for sample in samplenames if 'norm' in sample]
 	tumornames = [sample for sample in samplenames if 'tumor' in sample]

@@ -1,3 +1,6 @@
+#This script is designed to get the "unique" UTR sequences that define each position factor for each gene.
+
+
 import gffutils
 import os
 from collections import defaultdict
@@ -12,17 +15,32 @@ import gzip
 import argparse
 import random
 
-#python2
+#For every gene, the goal is to define what the overall usage of proximal/distal polyA sites is.  This is done by defining 
+#a "psi" value for every gene.  For each transcript in a gene, the "terminal fragment" (TF) is the last two
+#exons of the transcript concatenated together.  For each transcript, a position factor (PF) is calculated as (m / n + 1; will range 
+#between 0 and 1).
+#The tpm for its TF is multiplied by its PF.  This is then done for all TFs and their scaled values are summed and divided
+#by the unscaled sum of tpms for all TFs to give psi, which will also range between 0 (exculsive usage of the proximal polyA site)
+#and 1 (exclusive usage of the distal polyA site).  
+
+#Does a gene pass filters?
+def genefilters(gene, db):
+	proteincoding = False
+
+	if 'protein_coding' in gene.attributes['gene_type']:
+		proteincoding = True
+
+	if proteincoding == True:
+		return True
+	else:
+		return False
 
 #Does a transcript pass filters?
 def transcriptfilters(transcript, db):
 	exonnumberpass = False
 	TFlengthpass = False
-	proteincoding = False
-	NMDpass = False
+	proteincoding = False 
 	mrnaendpass = False
-	hasutrpass = False
-
 	#How many exons does it have
 	if len(list(db.children(transcript, featuretype = 'exon'))) >= 2:
 		exonnumberpass = True
@@ -44,45 +62,14 @@ def transcriptfilters(transcript, db):
 		TFlengthpass = True
 
 	#Is this transcript protein coding
-	if 'protein_coding' in transcript.attributes['transcript_type'] or len(list(db.children(transcript, featuretype = 'CDS', level = 1))) > 0:
+	if 'protein_coding' in transcript.attributes['transcript_type']:
 		proteincoding = True
-	else:
-		return False
-
-	#Is this transcript an NMD transcript?
-	if 'nonsense_mediated_decay' not in transcript.attributes['transcript_type']:
-		NMDpass = True
 
 	#Are we confident in the 3' end of this mrnaendpass
 	if 'tag' not in transcript.attributes or 'mRNA_end_NF' not in transcript.attributes['tag']:
 		mrnaendpass = True
 
-	#Does this transcript have a UTR.  Are the end of the CDS and the end of the transcript at the same place?
-	CDSexons = []
-	for CDSexon in db.children(transcript, featuretype = 'CDS', order_by = 'start'):
-		CDSexons.append([CDSexon.start, CDSexon.end])
-	if transcript.strand == '+':
-		CDSend = max(CDSexons, key = itemgetter(1))[1]
-		if CDSend != transcript.end:
-			hasutrpass = True
-	elif transcript.strand == '-':
-		CDSend = min(CDSexons, key = itemgetter(0))[0]
-		if CDSend != transcript.start:
-			hasutrpass = True
-
-
-	if exonnumberpass and TFlengthpass and proteincoding and NMDpass and mrnaendpass and hasutrpass:
-		return True
-	else:
-		return False
-
-#Does a gene pass filters?
-def genefilters(gene, db):
-	proteincoding = False
-	if 'protein_coding' in gene.attributes['gene_type']:
-		proteincoding = True
-
-	if proteincoding == True:
+	if exonnumberpass and TFlengthpass and proteincoding and mrnaendpass:
 		return True
 	else:
 		return False
@@ -90,26 +77,25 @@ def genefilters(gene, db):
 
 
 #Given an annotation in gff format, get the position factors for all transcripts.
-#THIS IS AN UPDATED GETPOSITIONFACTORS FUNCTION
 #It merges any two transcript ends that are less than <lengthfilter> away from each other into a single end.
 #This is so that you dont end up with unique regions that are like 4 nt long.
 #They might causes issues when it comes to counting kmers or reads that map to a given region.
-#Also, this function is actually getting you m values, not position factors, but it's what we want here
 
 def getpositionfactors(gff, lengthfilter):
+	lengthfilter = int(lengthfilter)
 	genecount = 0
 	txends = {} #{ENSMUSG : [strand, [list of distinct transcript end coords]]}
 	posfactors = {} #{ENSMUSG : {ENSMUST : positionfactor}}
 
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = gff
 	db_fn = os.path.abspath(gff_fn) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
 	#Get number of distinct transcript ends for each gene
 	genes = db.features_of_type('gene')
@@ -203,16 +189,36 @@ def getpositionfactors(gff, lengthfilter):
 				continue
 			txname = str(transcript.id).replace('transcript:', '')
 			if gene.strand == '+':
-				#m = possibleends.index(transcript.end)
 				m = mvalues[genename][transcript.end]
 			elif gene.strand == '-':
-				#m = possibleends.index(transcript.start)
 				m = mvalues[genename][transcript.start]
-			#posfactor = m / float(n - 1)
-			#posfactors[genename][txname] = posfactor
-			posfactors[genename][txname] = m
+			posfactor = m / float(n - 1)
+			posfactors[genename][txname] = posfactor
+
+	#Output file of the number of posfactors for each gene
+	with open('numberofposfactors.txt', 'w') as outfh:
+		outfh.write(('\t').join(['Gene', 'numberofposfactors']) + '\n')
+		for gene in posfactors: #{ENSMUSG : {ENSMUST : positionfactor}}
+			pfs = []
+			for tx in posfactors[gene]:
+				pfs.append(posfactors[gene][tx])
+			pfs = list(set(pfs))
+			txids = {} #{positionfactor : [list of transcriptIDs]}
+			for pf in sorted(pfs):
+				txids[pf] = []
+				for tx in posfactors[gene]:
+					if posfactors[gene][tx] == pf:
+						txids[float(pf)].append(tx)
+
+			alltxids = []
+			for pf in sorted(list(txids.keys())):
+				alltxids.append((',').join(txids[pf]))
+			outfh.write(('\t').join([gene, str(len(pfs)), ('\t').join(alltxids)]) + '\n')
+
 
 	return posfactors
+
+
 
 #Given a transcript, retrieve it's UTR coords
 def getUTRcoords(txid, db):
@@ -221,6 +227,7 @@ def getUTRcoords(txid, db):
 	UTRcoords = [] #[UTRstart, UTRstop]
 
 	transcript = db[txid]
+	noUTRcount = 0
 
 	for exon in db.children(transcript, featuretype = 'exon', order_by = 'start'):
 		exoncoords.append([exon.start, exon.end])
@@ -230,17 +237,23 @@ def getUTRcoords(txid, db):
 	#3' UTR start is directly after CDS end
 	if transcript.strand == '+':
 		CDSend = max(CDScoords, key = itemgetter(1))[1]
-		#If the transcript ends right were the CDS ends
+		#If the transcript ends right were the CDS ends, define the UTR as the 25 nt downstream of CDSend
 		if CDSend == transcript.end:
-			return None
-		UTR3start = CDSend + 1
-		UTRcoords = [UTR3start, transcript.end]
+			UTRcoords = [transcript.end + 1, transcript.end + 26]
+			print('NO UTR')
+			return UTRcoords
+		else:
+			UTR3start = CDSend + 1
+			UTRcoords = [UTR3start, transcript.end]
 	elif transcript.strand == '-':
 		CDSend = min(CDScoords, key = itemgetter(0))[0]
-		if CDSend == transcript.start: #the transcript ends right where the CDS ends
-			return None
-		UTR3start = CDSend - 1
-		UTRcoords = [transcript.start, UTR3start]
+		if CDSend == transcript.start: # If the transcript ends right where the CDS ends, define the UTR as the 25 nt upstream of CDSstart
+			UTRcoords = [transcript.start - 25, transcript.start]
+			print('NO UTR')
+			return UTRcoords
+		else:
+			UTR3start = CDSend - 1
+			UTRcoords = [transcript.start, UTR3start]
 
 	###Check to see if the UTR is fully contained within the coordinates of one exon
 	singleexonUTR = False
@@ -263,9 +276,9 @@ def getUTRcoords(txid, db):
 
 		#Now get breaks in consecutive exonic positions
 		#http://stackoverflow.com/questions/2361945/detecting-consecutive-integers-in-a-list
-		UTRexoncoords = []
-		for k, g in groupby(enumerate(overlappingbp), lambda (index, item): index-item):
-			exonbp = map(itemgetter(1), g)
+		UTRexoncoords = [] #[[exon1start, exon1stop], [exon2start, exon2stop]]
+		for k, g in groupby(enumerate(overlappingbp), lambda ix: ix[0] - ix[1]):
+			exonbp = list(map(itemgetter(1), g))
 			if len(exonbp) > 1:
 				UTRexoncoords.append([exonbp[0], exonbp[-1]])
 
@@ -276,20 +289,23 @@ def getUTRcoords(txid, db):
 def getallUTRcoords(gff, posfactors):
 	#posfactors = {} #{ENSMUSG : {ENSMUST : positionfactor}}
 	UTRcoords = {} #{ENSMUSG : {posfactor : {ENSMUST1 : [coords], ENSMUST2 : [coords]}}}
-	
+	print(len(posfactors))
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = gff
 	db_fn = os.path.abspath(gff_fn) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
-	print 'Getting UTR coords for all transcripts...'
+	print('Getting UTR coords for all transcripts...')
 
+	genecounter = 0
 	for gene in posfactors:
+		genecounter +=1
+		print(genecounter, gene, len(posfactors[gene]))
 		#Only genes that have more than one polyA site
 		if len(posfactors[gene]) == 1:
 			continue
@@ -298,11 +314,17 @@ def getallUTRcoords(gff, posfactors):
 		for transcript in posfactors[gene]:
 			posfactor = posfactors[gene][transcript]
 			txUTRcoords = getUTRcoords(transcript, db)
+			#Sometimes a transcript does not have a UTR (the end of the CDS == the end of the tx) meaning txUTRcoords is None
+			if txUTRcoords == None:
+				print('WHAT')
+				continue
 			if posfactor not in UTRcoords[gene]:
 				UTRcoords[gene][posfactor] = {}
 			UTRcoords[gene][posfactor][transcript] = txUTRcoords
 
 	return UTRcoords
+
+
 
 def mergeUTRs(txids, db, listofUTRcoords):
 	#Use bedtools merge to merge UTRs
@@ -321,12 +343,14 @@ def mergeUTRs(txids, db, listofUTRcoords):
 	chrms = list(set(chrms))
 	strands = list(set(strands))
 	if len(chrms) > 1 or len(strands) > 1:
-		print 'ERROR: Merge items from different chromosomes or strands!'
+		print('ERROR: Merge items from different chromosomes or strands!')
 		sys.exit()
 
 	#Need each feature (exon) to be a single line
 	exons = []
+	print('listofUTRcoords: ', listofUTRcoords)
 	for utr in listofUTRcoords:
+		print('UTR: ', utr)
 		#If this is a single exon UTR, this will NOT be a nested list
 		if any(isinstance(i, list) for i in utr) == False:
 			exons.append([utr[0], utr[1]])
@@ -364,36 +388,45 @@ def mergeUTRs(txids, db, listofUTRcoords):
 	os.remove('temp.sorted.bed')
 	return mergedexons
 
+
+
 def mergeUTRcoords(gff, UTRcoords):
 	#Go through UTRcoords (output of getallUTRcoords).
 	#If there are any position factors that have multiple transcripts associated with them, use mergeUTRs
 	#to merge their UTRs. Then replace their entry in UTRcoords with this merged UTR.
 	#After this function, all position factors will have a single coordinate list associated with them.
+	#UTRcoords = {} #{ENSMUSG : {posfactor : {ENSMUST1 : [coords], ENSMUST2 : [coords]}}}
 
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = gff
 	db_fn = os.path.abspath(gff_fn) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
-	print 'Merging UTRs that have the same polyA site...'
+	print('Merging UTRs that have the same polyA site...')
 
 	cleanedUTRcoords = {} #{ENSMUSG : {posfactor1 : [coords], posfactor2 : [coords]}}
 
 	for gene in UTRcoords:
+		#It's possible to have a gene that only has one posfactor that actually has utr coordinates associated with it
+		#This is because sometimes a tx would not have a UTR, but still it ends up in posfactors dict
+		#If a gene does not have at least two different posfactors with utr coordinates associated with them, skip this gene.
+		if len(UTRcoords[gene]) <= 1:
+			continue
 		cleanedUTRcoords[gene] = {}
 		for posfactor in UTRcoords[gene]:
 			#If there is only one UTR associated with this posfactor, we don't need to merge
 			if len(UTRcoords[gene][posfactor]) == 1:
-				txid = UTRcoords[gene][posfactor].keys()[0]
+				txid = list(UTRcoords[gene][posfactor].keys())[0]
 				cleanedUTRcoords[gene][posfactor] = UTRcoords[gene][posfactor][txid]
 			elif len(UTRcoords[gene][posfactor]) > 1:
 				txids = []
 				utrs = []
+				print(gene)
 				for transcript in UTRcoords[gene][posfactor]:
 					txids.append(transcript)
 					utrs.append(UTRcoords[gene][posfactor][transcript])
@@ -402,6 +435,8 @@ def mergeUTRcoords(gff, UTRcoords):
 				cleanedUTRcoords[gene][posfactor] = mergedexons
 
 	return cleanedUTRcoords
+
+
 
 def subtractUTRs(dictofUTRcoords, geneid, db):
 	#Use bedtools subtract to get unique regions in each UTR
@@ -416,9 +451,12 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 
 	#In this dict, the keys are the order of the UTRs.
 	#Write each UTR to a bed.
+	print(dictofUTRcoords)
 	for i in range(numberofutrs):
+		pf = float(i / (numberofutrs - 1))
 		#Write UTR to bed
-		utr = dictofUTRcoords[i]
+		utr = dictofUTRcoords[pf]
+		print(utr)
 
 		#Need each feature (exon) to be a single line
 		utrexons = []
@@ -487,6 +525,8 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 		os.remove('temp{0}.bed'.format(i))
 		os.remove('temp{0}.sorted.bed'.format(i))
 
+	print(uniqueutrs)
+
 	#The start of UTR B should not be allowed to be before the end of UTR A. Fix it so this is so.
 	uniqueutrs_filt = {} #{utrnumber : [coords]}
 	previousend = 0
@@ -537,16 +577,16 @@ def subtractUTRs(dictofUTRcoords, geneid, db):
 
 def getuniquecoords(gff, cleanedUTRcoords):
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = gff
 	db_fn = os.path.abspath(gff_fn) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
-	print 'Subtracting UTRs to get unique sequences for {0} genes...'.format(len(cleanedUTRcoords))
+	print('Subtracting UTRs to get unique sequences for {0} genes...'.format(len(cleanedUTRcoords)))
 
 	uniqueutrcoords = {} #{ENSMUSG : {posfactor1 : [coords], posfactor2 : [coords]}}
 
@@ -554,30 +594,31 @@ def getuniquecoords(gff, cleanedUTRcoords):
 	for gene in cleanedUTRcoords:
 		genecounter +=1
 		if genecounter % 1000 == 0:
-			print 'Subtracting UTRs for gene {0} of {1}...'.format(genecounter, len(cleanedUTRcoords))
+			print('Subtracting UTRs for gene {0} of {1}...'.format(genecounter, len(cleanedUTRcoords)))
 		utrs = cleanedUTRcoords[gene]
 		uniqueutrs = subtractUTRs(utrs, gene, db)
 		uniqueutrcoords[gene] = uniqueutrs
 
 	return uniqueutrcoords
 
+
 def makegff(gff, uniqueutrcoords):
 	#Given a dictionary of unique coords for each gene, make a gff
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = gff
 	db_fn = os.path.abspath(gff_fn) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
-	print 'Making gff of unique UTR sequences for {0} genes...'.format(len(uniqueutrcoords))
+	print('Making gff of unique UTR sequences for {0} genes...'.format(len(uniqueutrcoords)))
 
 	with open('uniqueutrcoords.gff', 'w') as outfh:
 		#Write line indicating what this gff was made from
-		outfh.write('#gff_annotation = {0}'.format(gff) + '\n')
+		outfh.write('#gff_annotation = {0}'.format(os.path.abspath(gff)) + '\n')
 		for gene in uniqueutrcoords:
 			chrm = db[gene].chrom
 			strand = db[gene].strand
@@ -618,24 +659,25 @@ def makegff(gff, uniqueutrcoords):
 						'.', 'ID={0}'.format(gene + '_' + 'uniqueUTR{0}'.format(str(uniqueseq)) + '_' + 'exon{0}'.format(exoncounter)) + ';' +
 						'Parent={0}'.format(gene + '_' + 'uniqueUTR{0}'.format(str(uniqueseq))) + ';' + 'number_of_exons={0}'.format(len(uniqueutrcoords[gene][uniqueseq]))]) + '\n')
 
+
 def getsequences(utrgff, genomefasta):
 	#Take the coords of the unique seqs and get the sequences
 	#Make gff database
-	print 'Indexing gff...'
+	print('Indexing gff...')
 	gff_fn = utrgff
 	db_fn = os.path.abspath(utrgff) + '.db'
 	if os.path.isfile(db_fn) == False:
 		gffutils.create_db(gff_fn, db_fn, merge_strategy = 'merge', verbose = True)
 
 	db = gffutils.FeatureDB(db_fn)
-	print 'Done indexing!'
+	print('Done indexing!')
 
-	print 'Indexing genome sequence...'
-	seq_dict = SeqIO.to_dict(SeqIO.parse(gzip.open(genomefasta), 'fasta'))
-	print 'Done indexing!'
+	print('Indexing genome sequence...')
+	seq_dict = SeqIO.to_dict(SeqIO.parse(gzip.open(genomefasta, 'rt'), 'fasta'))
+	print('Done indexing!')
 
 	utrs = db.features_of_type('UTR')
-	print 'Retrieving unique UTR seqeuences for {0} genes...'.format(sum(1 for _ in utrs))
+	print('Retrieving unique UTR seqeuences for {0} genes...'.format(sum(1 for _ in utrs)))
 
 	#Remake generator
 	utrs = db.features_of_type('UTR')
@@ -658,9 +700,6 @@ def getsequences(utrgff, genomefasta):
 	os.remove(db_fn)
 
 
-
-
-
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--gff', type = str, help = 'Genome annotation in gff format.')
@@ -668,16 +707,14 @@ if __name__ == '__main__':
 	args = parser.parse_args()
 
 	posfactors = getpositionfactors(args.gff, 25) #lengthfactor of 25 so that transcript ends within 25 nt of each other are given the same m value
+	#pickle.dump(posfactors, open('posfactors.pkl', 'wb'))
+	#posfactors = pickle.load(open('posfactors.pkl', 'rb'))
 	UTRcoords = getallUTRcoords(args.gff, posfactors)
+	#pickle.dump(UTRcoords, open('utrcoords.pkl', 'wb'))
+	#UTRcoords = pickle.load(open('utrcoords.pkl', 'rb'))
 	cleanedUTRcoords = mergeUTRcoords(args.gff, UTRcoords)
+	#pickle.dump(cleanedUTRcoords, open('cleanedUTRcoords.pkl', 'wb'))
+	#cleanedUTRcoords = pickle.load(open('cleanedUTRcoords.pkl', 'rb'))
 	uniqueutrcoords = getuniquecoords(args.gff, cleanedUTRcoords)
 	makegff(args.gff, uniqueutrcoords)
 	getsequences('uniqueutrcoords.gff', args.genomefasta)
-
-
-
-
-
-
-
-

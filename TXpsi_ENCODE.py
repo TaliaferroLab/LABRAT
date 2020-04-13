@@ -49,7 +49,7 @@ def loadpsis(psis, samples):
 	renamedict = {} #{oldname : newname}
 	psidf = pd.read_table(psis, sep = '\t', header = 0, index_col = False)
 	for column in psidf:
-		if column == 'Gene':
+		if column == 'Gene' or column == 'genetype':
 			continue
 		sampleID = column.split('_')[0]
 		rep = column.split('_')[1]
@@ -346,7 +346,7 @@ def getlmepdf_twocelllines(df):
 
 		
 		#If this is a control kd column, skip it
-		if column == 'Gene' or column.split('_')[0] == 'controlkd':
+		if column == 'Gene' or column.split('_')[0] == 'controlkd' or column == 'genetype':
 			continue
 
 		#If we've already seen this sample (it's the second rep), skip it
