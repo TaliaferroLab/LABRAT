@@ -641,18 +641,17 @@ def classifygenes(exoniccoords, gff):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'LME'])
+	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi'])
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
 	parser.add_argument('--txfasta', type = str, help = 'Fasta file of sequences to quantitate with salmon. Often the output of makeTFfasta mode.')
 	parser.add_argument('--reads1', type = str, help = 'Comma separated list of forward read fastq files. Needed for runSalmon.')
-	parser.add_argument('--reads2', type = str, help = 'Comma separated list of reverse read fastq files. Needed for runSalmon.')
+	parser.add_argument('--reads2', type = str, help = 'Comma separated list of reverse read fastq files. Needed for runSalmon. Omit for single end data.')
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
-	parser.add_argument('--psifile', type = str, help = 'Psi value table. Needed for LME.')
-	parser.add_argument('--sampconds', type = str, help = 'Needed for LME. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
+	parser.add_argument('--sampconds', type = str, help = 'Needed for calculatepsi. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
 	args = parser.parse_args()
 
 
@@ -721,6 +720,4 @@ if __name__ == '__main__':
 		genetypedf.columns = ['Gene', 'genetype']
 		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
 		finalpsidf.to_csv('LABRATpsis.3end.python3.txt', sep = '\t', index = False, na_rep = 'NA')
-
-	elif args.mode == 'LME':
-		getdpsis(args.psifile, args.sampconds)
+		getdpsis('LABRATpsis.3end.python3.txt', args.sampconds)
