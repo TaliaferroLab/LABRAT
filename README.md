@@ -1,5 +1,4 @@
-# LABRAT 
-## Lightweight Alignment-Based Reckoning of Alternative Three-prime ends
+# LABRAT <br/> <br/>Lightweight Alignment-Based Reckoning of Alternative Three-prime ends
 
 ## Overview
 
