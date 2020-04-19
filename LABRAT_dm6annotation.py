@@ -305,13 +305,13 @@ def runSalmon(threads, reads1, reads2, samplename):
 	#paired end
 	if reads2:
 		print('Running salmon for {0}...'.format(samplename))
-		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', 'txfasta.idx', '--validateMapping']
+		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--seqBias', '--gcBias', '-1', reads1, '-2', reads2, '-o', samplename, '--index', 'txfasta.idx', '--validateMappings']
 
 	#Single end
 	elif not reads2:
 		fldMean = '250' #fragment length distribution mean
 		fldSD = '20' #fragment length distribution standard deviation	
-		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--fldMean', fldMean, '--fldSD', fldSD, '--seqBias', '-r', reads1, '-o', samplename, '--index', 'txfasta.idx', '--validateMapping']
+		command = ['salmon', 'quant', '--libType', 'A', '-p', threads, '--fldMean', fldMean, '--fldSD', fldSD, '--seqBias', '-r', reads1, '-o', samplename, '--index', 'txfasta.idx', '--validateMappings']
 
 	subprocess.call(command)
 
@@ -608,7 +608,7 @@ def classifygenes(exoniccoords, gff):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'LME'])
+	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi'])
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
@@ -618,8 +618,7 @@ if __name__ == '__main__':
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
-	parser.add_argument('--psifile', type = str, help = 'Psi value table. Needed for LME.')
-	parser.add_argument('--sampconds', type = str, help = 'Needed for LME. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
+	parser.add_argument('--sampconds', type = str, help = 'Needed for calculatepsi. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
 	args = parser.parse_args()
 
 
@@ -688,6 +687,4 @@ if __name__ == '__main__':
 		genetypedf.columns = ['Gene', 'genetype']
 		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
 		finalpsidf.to_csv('LABRATpsis.3end.python3.txt', sep = '\t', index = False, na_rep = 'NA')
-
-	elif args.mode == 'LME':
-		getdpsis(args.psifile, args.sampconds)
+		getdpsis('LABRATpsis.3end.python3.txt', args.sampconds)
