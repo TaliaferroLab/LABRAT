@@ -55,7 +55,7 @@ optional arguments:
                         and calculatepsi.
 ```
 
-then you are good to go.  If you get an **Import Error**, one or more of the modules did not install correctly.  In that case, using an alternative package manager like **pip** may help get all these modules installed.
+then you are good to go.  If you get an **ImportError**, one or more of the modules did not install correctly.  In that case, using an alternative package manager like **pip** may help get all these modules installed.
 
 ## Annotations
 
@@ -106,7 +106,7 @@ The final step is the calculation of psi values for each gene in each sample, an
 
 sampconds is a two column, tab-delimited file with sample names split by condition.  ConditionA samples should be in the first column and ConditionB samples in the second column. Reported delta psi values will be ConditionB - ConditionA. These sample names should match those given to runSalmon with ```--samplename```.
 
-salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides one called 'txfasta.idx'.
+salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides one called 'txfasta.idx'.**
 
 ```
 python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --gff <genomegff>
