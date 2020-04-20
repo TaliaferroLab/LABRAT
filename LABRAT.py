@@ -199,7 +199,7 @@ def getpositionfactors(gff, lengthfilter):
 
 	#Output file of the number of posfactors for each gene
 	with open('numberofposfactors.txt', 'w') as outfh:
-		outfh.write(('\t').join(['Gene', 'numberofposfactors', 'interpolyAdist']) + '\n')
+		outfh.write(('\t').join(['Gene', 'numberofposfactors', 'txids', 'interpolyAdist']) + '\n')
 		for gene in posfactors: #{ENSMUSG : {ENSMUST : positionfactor}}
 			pfs = []
 			for tx in posfactors[gene]:

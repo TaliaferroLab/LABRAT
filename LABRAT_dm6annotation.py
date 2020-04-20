@@ -199,13 +199,42 @@ def getpositionfactors(gff, lengthfilter):
 
 	#Output file of the number of posfactors for each gene
 	with open('numberofposfactors.txt', 'w') as outfh:
-		outfh.write(('\t').join(['Gene', 'numberofposfactors']) + '\n')
-		for gene in posfactors:
+		outfh.write(('\t').join(['Gene', 'numberofposfactors', 'txids', 'interpolyAdist']) + '\n')
+		for gene in posfactors: #{ENSMUSG : {ENSMUST : positionfactor}}
 			pfs = []
 			for tx in posfactors[gene]:
 				pfs.append(posfactors[gene][tx])
 			pfs = list(set(pfs))
-			outfh.write(('\t').join([gene, str(len(pfs))]) + '\n')
+			
+			#write distance between polyA sites for those genes that only have 2 pfs
+			if len(pfs) == 2:
+				g = db[gene]
+				for tx in posfactors[gene]:
+					if posfactors[gene][tx] == 0:
+						txpf1 = tx
+					elif posfactors[gene][tx] == 1:
+						txpf2 = tx
+				t1 = db[txpf1]
+				t2 = db[txpf2]
+				if g.strand == '+':
+					interpolyAdist = t2.end - t1.end
+				elif g.strand == '-':
+					interpolyAdist = t1.start - t2.start
+			elif len(pfs) != 2:
+				interpolyAdist = 'NA'
+
+			#Get list of txs that belong to each pf
+			txids = {} #{positionfactor : [list of transcriptIDs]}
+			for pf in sorted(pfs):
+				txids[pf] = []
+				for tx in posfactors[gene]:
+					if posfactors[gene][tx] == pf:
+						txids[float(pf)].append(tx)
+
+			alltxids = []
+			for pf in sorted(list(txids.keys())):
+				alltxids.append((',').join(txids[pf]))
+			outfh.write(('\t').join([gene, str(len(pfs)), ('_').join(alltxids), str(interpolyAdist)]) + '\n')
 
 
 	return posfactors
