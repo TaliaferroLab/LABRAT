@@ -686,5 +686,5 @@ if __name__ == '__main__':
 		genetypedf.reset_index(level = 0, inplace = True)
 		genetypedf.columns = ['Gene', 'genetype']
 		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
-		finalpsidf.to_csv('LABRATpsis.3end.python3.txt', sep = '\t', index = False, na_rep = 'NA')
-		getdpsis('LABRATpsis.3end.python3.txt', args.sampconds)
+		finalpsidf.to_csv('LABRAT.psis', sep = '\t', index = False, na_rep = 'NA')
+		getdpsis('LABRAT.psis', args.sampconds)
