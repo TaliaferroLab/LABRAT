@@ -12,7 +12,7 @@ LABRAT quantifies alternative polyadenylation (APA) site usage by assigning a "p
 
 LABRAT is purely python-based (python3), but requires a number of non-standard python modules.  These are most easily installed with [conda](https://docs.conda.io/projects/conda/en/latest/index.html). They are listed below. Versions of each module that are known to be supported are listed, but other versions may work as well.
 
-- python 3.6.2
+- python 3.6
 - gffutils 0.9
 - numpy 1.18.1
 - biopython 1.69
