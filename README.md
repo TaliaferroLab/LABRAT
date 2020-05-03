@@ -1,3 +1,5 @@
+![alt text](https://static1.squarespace.com/static/591d9c8cbebafbf01b1e28f9/t/5eae1f2c2bffcf20e605efea/1588469550974/image+%2811%29.png?format=2500w "LABRAT")
+
 # LABRAT <br/> <br/>Lightweight Alignment-Based Reckoning of Alternative Three-prime ends
 
 ## Overview
