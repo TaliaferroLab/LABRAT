@@ -86,7 +86,7 @@ The option ```--lasttwoexons``` is optional, but recommended. If included, it te
 
 Only protein-coding transcripts and those with confidently defined ends (i.e. those that are not tagged with 'mRNA_end_NF') will end up in this fasta. The output of this step will be a file named either 'TFseqs.fa' or 'wholetranscriptseqs.fa', depending on whether or not the ```--lasttwoexons``` flag was used.
 
-## runSalmon
+### runSalmon
 
 After creating a fasta file, transcript abundances are calculated using salmon. Reads can be either fastq or fasta, and either gzipped or not. Single and paired end reads are supported. **This step should be performed in a clean, empty directory.**
 
@@ -102,7 +102,7 @@ python LABRAT.py --mode runSalmon --txfasta TFseqs.fa --reads1 CondARep1_1.fq.gz
 
 The output of this step will be directories containing salmon quantification files, with one directory per sample.
 
-## calculatepsi
+### calculatepsi
 
 The final step is the calculation of psi values for each gene in each sample, and the identification genes that show significantly different psi values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
 
@@ -121,3 +121,10 @@ The main output file is named '**LABRAT.psis.pval**'. It contains the psi value 
 Additionally, this file contains a column called 'genetype'. This contains information about whether the alternative polyadenylation sites in this gene are contained within the same exon (TUTR) or within different exons (ALE). If there are only 2 APA sites for this gene, the gene must be labeled as either TUTR or ALE.  If there are more than 2, if *all* sites are contained within either the same exon, the gene is labeled TUTR.  If *all* sites are contained within different exons, it is labeled ALE. If neither of these is true, the gene is labeled 'mixed'.
 
 A secondary output file is name **'numberofposfactors.txt'**.  This file contains information about the transcripts that were assigned to each APA site. The column 'numberofposfactors' indicates the number of distinct (separated by at least 25 nt) APA sites found for this gene. The column 'txids' has the IDs of the transcripts assigned to each APA site.  APA sites are separated by underscores and transcripts assigned to the same site are separated by commas. In this column, APA sites are ordered from most upstream to most downstream.  The final column contains the distance between the APA sites, but only if the gene contains just 2 sites.
+
+## Advanced Usage
+
+LABRAT identifies genes with significantly different psi values across conditions using a linear mixed effects model. When you are simply comparing across conditions, this is essentially a t-test. However, an advantage of this approach is that it allows for the inclusion of covariates when testing for significance. This has been tested and does seem to work, although currently, incorporating covariates requires editing the code directly (see the model formulae in the getdpsis() function).
+
+Future releases aim to incorporate this in a more user-friendly fashion.
+
