@@ -80,7 +80,7 @@ The first step consists of making a fasta file of transcripts that will later be
 python LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons
 ```
 
-This will create a database that stores information about the gff. Initial creation of this database can take up to an hour, but it is written to disk so that it does not have to be created in future runs.
+This will create a database that stores information about the gff using [gffutils](https://daler.github.io/gffutils/index.html). Initial creation of this database can take up to an hour, but it is written to disk so that it does not have to be created in future runs.
 
 The option ```--lasttwoexons``` is optional, but recommended. If included, it tells LABRAT to only consider the last two exons of transcripts for future quantification.  This may be important because it removes assumptions present in the GFF file about relationships between alternative splicing outcomes happening early in a transcript and polyA site choice.
 
@@ -88,7 +88,7 @@ Only protein-coding transcripts and those with confidently defined ends (i.e. th
 
 ### runSalmon
 
-After creating a fasta file, transcript abundances are calculated using salmon. Reads can be either fastq or fasta, and either gzipped or not. Single and paired end reads are supported. **This step should be performed in a clean, empty directory.**
+After creating a fasta file, transcript abundances are calculated using salmon. Reads can be either fastq or fasta, and either gzipped or not. If gzipped, filenames must end in '.gz'. Single and paired end reads are supported. **This step should be performed in a clean, empty directory.**
 
 ```
 python LABRAT.py --mode runSalmon --txfasta <output of makeTFfasta> --reads1 <comma separated list of forward read files> --reads2 <Optional, comma separated list of reverse read files> --samplename <comma separated list of sample names> --threads <number of threads to use>
@@ -104,11 +104,11 @@ The output of this step will be directories containing salmon quantification fil
 
 ### calculatepsi
 
-The final step is the calculation of psi values for each gene in each sample, and the identification genes that show significantly different psi values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
+The final step is the calculation of psi values for each gene in each sample, and the identification of genes that show significantly different psi values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
 
 sampconds is a two column, tab-delimited file with sample names split by condition.  ConditionA samples should be in the first column and ConditionB samples in the second column. Reported delta psi values will be ConditionB - ConditionA. These sample names should match those given to runSalmon with ```--samplename```.
 
-salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides one called 'txfasta.idx'.**
+salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides, optionally, one called 'txfasta.idx'.**
 
 ```
 python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --gff <genomegff>
