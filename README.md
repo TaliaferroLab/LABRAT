@@ -8,7 +8,7 @@ LABRAT is designed to quantify the usage of alternative polyadenylation and clea
 
 It takes advantage of the kmer-based, quasi-mapping of reads to transcripts performed by [salmon](https://combine-lab.github.io/salmon/). When it comes to quantifying the usage of alternative 3' UTRs, this strategy has many advantages over classical methods that count the number of counts contained within transcript regions after alignment to the transcriptome. Since alternative 3' UTRs often contain large amounts of sequence in common between them, many reads will map to multiple 3' UTRs, reducing the discriminatory power they contain when align-then-count methods are used.  Transcript abundance quantification with salmon's "lightweight alignments" circumvents this issue to allow accurate quantification of alternative 3' ends.
 
-LABRAT quantifies alternative polyadenylation (APA) site usage by assigning a "psi" value (apologies to the alternative splicing field) for each gene in each sample. Psi values of 0 indicate exclusive usage of the most upstream APA site while psi values of 1 indicate exclusive usage of the most downstream APA site.  When comparing psi values across conditions, an increase in psi reflects increased usage of downstream APA sites while a decrease in psi reflects increased usage of upstream APA sites.  LABRAT uses psi values in experimental replicates to identify genes whose APA site usage significantly differs between experimental conditions.
+LABRAT quantifies alternative polyadenylation (APA) site usage by assigning a "psi" value (apologies to the alternative splicing field) for each gene in each sample. Psi values of 0 indicate exclusive usage of the most upstream APA site while 𝜓 values of 1 indicate exclusive usage of the most downstream APA site.  When comparing 𝜓 values across conditions, an increase in 𝜓 reflects increased usage of downstream APA sites while a decrease in 𝜓 reflects increased usage of upstream APA sites.  LABRAT uses 𝜓 values in experimental replicates to identify genes whose APA site usage significantly differs between experimental conditions.
 
 ## Installation
 
@@ -104,9 +104,9 @@ The output of this step will be directories containing salmon quantification fil
 
 ### calculatepsi
 
-The final step is the calculation of psi values for each gene in each sample, and the identification of genes that show significantly different psi values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
+The final step is the calculation of 𝜓 values for each gene in each sample, and the identification of genes that show significantly different 𝜓 values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
 
-sampconds is a two column, tab-delimited file with sample names split by condition.  ConditionA samples should be in the first column and ConditionB samples in the second column. Reported delta psi values will be ConditionB - ConditionA. These sample names should match those given to runSalmon with ```--samplename```.
+sampconds is a two column, tab-delimited file with sample names split by condition.  ConditionA samples should be in the first column and ConditionB samples in the second column. Reported delta 𝜓 values will be ConditionB - ConditionA. These sample names should match those given to runSalmon with ```--samplename```.
 
 salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides, optionally, one called 'txfasta.idx'.**
 
@@ -116,7 +116,7 @@ python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> -
 
 ## Expected output files
 
-The main output file is named '**LABRAT.psis.pval**'. It contains the psi value for every gene in every condition.  Genes that did not meet an expression cutoff (TPM < 5) in a condition have psi values of NA.  This file also contains delta psi values (ConditionB - ConditionA), a raw pvalue, and a Benjamini-Hochberg corrected pvalue (FDR).
+The main output file is named '**LABRAT.psis.pval**'. It contains the 𝜓 value for every gene in every condition.  Genes that did not meet an expression cutoff (TPM < 5) in a condition have 𝜓 values of NA.  This file also contains delta 𝜓 values (ConditionB - ConditionA), a raw pvalue, and a Benjamini-Hochberg corrected pvalue (FDR).
 
 Additionally, this file contains a column called 'genetype'. This contains information about whether the alternative polyadenylation sites in this gene are contained within the same exon (TUTR) or within different exons (ALE). If there are only 2 APA sites for this gene, the gene must be labeled as either TUTR or ALE.  If there are more than 2, if *all* sites are contained within either the same exon, the gene is labeled TUTR.  If *all* sites are contained within different exons, it is labeled ALE. If neither of these is true, the gene is labeled 'mixed'.
 
@@ -124,7 +124,7 @@ A secondary output file is name **'numberofposfactors.txt'**.  This file contain
 
 ## Advanced Usage
 
-LABRAT identifies genes with significantly different psi values across conditions using a linear mixed effects model. When you are simply comparing across conditions, this is essentially a t-test. However, an advantage of this approach is that it allows for the inclusion of covariates when testing for significance. This has been tested and does seem to work, although currently, incorporating covariates requires editing the code directly (see the model formulae in the getdpsis() function).
+LABRAT identifies genes with significantly different 𝜓 values across conditions using a linear mixed effects model. When you are simply comparing across conditions, this is essentially a t-test. However, an advantage of this approach is that it allows for the inclusion of covariates when testing for significance. This has been tested and does seem to work, although currently, incorporating covariates requires editing the code directly (see the model formulae in the getdpsis() function).
 
 Future releases aim to incorporate this in a more user-friendly fashion.
 
