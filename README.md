@@ -65,6 +65,8 @@ LABRAT requires a genome annotation in gff3 format. We **strongly** recommend us
 
 For *Drosophila* annoatations, a separate LABRAT, LABRAT_dm6annotation.py, is provided. This version will accept GFF files from [Ensembl](ftp://ftp.ensembl.org/pub/release-99/gff3/drosophila_melanogaster/). It *should* also work with Ensembl GFF files for other species, but this has not been rigorously tested.
 
+When given to LABRAT, these gff annotation files must **not** be compressed.
+
 ## Running LABRAT
 
 Running LABRAT consists of three steps:</br>
