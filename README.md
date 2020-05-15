@@ -82,7 +82,9 @@ The first step consists of making a fasta file of transcripts that will later be
 python LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons
 ```
 
-This will create a database that stores information about the gff using [gffutils](https://daler.github.io/gffutils/index.html). Initial creation of this database can take up to an hour, but it is written to disk so that it does not have to be created in future runs.
+This will create a database that stores information about the gff using [gffutils](https://daler.github.io/gffutils/index.html). Initial creation of this database can take up to an hour, but it is written to disk so that it does not have to be created in future runs. Compressed gff files are not currently supported.
+
+*Important*: If you kill the database creation process before it is finished, you will still have a .db file written. The next time you run LABRAT, it will see that file and think it is complete. This will obviously lead to problems. If this happens, simply delete the .db file. This will force LABRAT to create the .db file again.
 
 The option ```--lasttwoexons``` is optional, but recommended. If included, it tells LABRAT to only consider the last two exons of transcripts for future quantification.  This may be important because it removes assumptions present in the GFF file about relationships between alternative splicing outcomes happening early in a transcript and polyA site choice.
 
