@@ -208,12 +208,14 @@ def getpositionfactors(gff, lengthfilter):
 			
 			#write distance between polyA sites for those genes that only have 2 pfs
 			if len(pfs) == 2:
-				g = db[gene]
+				#Have to put the stupid 'gene:' back on and the 'transcript:' back on
+				dbgenename = 'gene:' + gene
+				g = db[dbgenename]
 				for tx in posfactors[gene]:
 					if posfactors[gene][tx] == 0:
-						txpf1 = tx
+						txpf1 = 'transcript:' + tx
 					elif posfactors[gene][tx] == 1:
-						txpf2 = tx
+						txpf2 = 'transcript:' + tx
 				t1 = db[txpf1]
 				t2 = db[txpf2]
 				if g.strand == '+':
