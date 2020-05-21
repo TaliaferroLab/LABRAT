@@ -9,5 +9,5 @@ dependencies:
 - pandas=1.0.*
 - statsmodels=0.10.*
 - scipy=1.3.*
-- salmon
+- salmon=0.14.*
 

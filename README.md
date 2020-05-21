@@ -21,9 +21,11 @@ LABRAT is purely python-based (python3), but requires a number of non-standard p
 - pandas 1.0.3
 - statsmodels 0.10.2
 - scipy 1.3.1
-- salmon (not a python module, but installable using conda)
+- salmon 0.14 (not a python module, but installable using conda)
 
 A safe and easy way to install all of these would be to create a conda environment containing them. We have provided a configuration file that contains all the information needed to setup a LABRAT-ready environment.
+
+*Note:* The most recent version of [salmon](https://github.com/COMBINE-lab/salmon/releases) has changed the way that transcriptome indexes are made. LABRAT does not currently support these versions (salmon >= 1.0.0), but will in the future.
 
 ```
 conda env create -f labratenv.yml
