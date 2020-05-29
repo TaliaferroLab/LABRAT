@@ -114,12 +114,22 @@ The output of this step will be directories containing salmon quantification fil
 
 The final step is the calculation of 𝜓 values for each gene in each sample, and the identification of genes that show significantly different 𝜓 values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
 
-sampconds is a two column, tab-delimited file with sample names split by condition.  ConditionA samples should be in the first column and ConditionB samples in the second column. Reported delta 𝜓 values will be ConditionB - ConditionA. These sample names should match those given to runSalmon with ```--samplename```.
+sampconds is a tab-delimited file with a column header row that gives information about the samples. Column names are strict, and the first two columns are required. The first column should be named 'sample' and contain the names of every sample to be compared. These sample names should match those given to runSalmon with ```--samplename```. The second column should be named 'condition' and should contain two factors identifying the grouping of the samples for the comparison of interest.  These factors must also be given as the arguments **--conditionA** and **--conditionB**.  Delta 𝜓 values will be reported as B-A.  Additional columns representing covariates can be included, but not are not requried. Covariate column names must contain 'covariate' within them. A sample sampconds file is provided below.
+
+| sample | condition | covariate1 |
+---------|-----------|--------
+| Brain_M1 | Brain| M |
+| Brain_F1 | Brain | F |
+| Liver_M1 | Liver | M |
+| Liver_F1 | Liver | F |
+| Liver_F2 | Liver | F |
+
+
 
 salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides, optionally, one called 'txfasta.idx'.**
 
 ```
-python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --gff <genomegff>
+python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff>
 ```
 
 ## Expected output files

@@ -16,6 +16,7 @@ import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 from scipy.stats.distributions import chi2
 import warnings
+import time
 
 #For every gene, the goal is to define what the overall usage of proximal/distal polyA sites is.  This is done by defining 
 #a "psi" value for every gene.  For each transcript in a gene, the "terminal fragment" (TF) is the last two
@@ -389,8 +390,176 @@ def calculatepsi(positionfactors, salmondir):
 	return psis
 
 
+def getdpsis_covariate(psifile, samp_conds_file, conditionA, conditionB):
+	#Given a table of psis, calculate dpsis and LME-based p values
+	deltapsidict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with df
+	pvaluedict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with q values
+
+	psidf = pd.read_csv(psifile, sep = '\t', header = 0, index_col = False)
+
+	sampconddf = pd.read_csv(samp_conds_file, sep = '\t', index_col = False, header = 0)
+	colnames = list(sampconddf.columns)
+	covariate_columns = [c for c in colnames if 'covariate' in c]
+
+	condasamps = sampconddf.loc[sampconddf['condition'] == conditionA, 'sample'].tolist()
+	condbsamps = sampconddf.loc[sampconddf['condition'] == conditionB, 'sample'].tolist()
+
+	print('Condition A samples: ' + (', ').join(condasamps))
+	print('Condition B samples: ' + (', ').join(condbsamps))
+
+	#Store relationships of conditions and the samples in that condition
+	#It's important that this dictionary be ordered because we are going to be iterating through it
+	samp_conds = OrderedDict({'cond1' : condasamps, 'cond2' : condbsamps})
+
+	#Get a list of all samples
+	samps = []
+	for cond in samp_conds:
+		samps += samp_conds[cond]
+
+	#Iterate through rows, making a dictionary from every row, turning it into a dataframe, then calculating p value
+	genecounter = 0
+	for index, row in psidf.iterrows():
+		genecounter +=1
+		if genecounter % 1000 == 0:
+			print('Calculating pvalue for gene {0}...'.format(genecounter))
+		
+		d = {}
+		d['Gene'] = [row['Gene']] * len(samps)
+		d['variable'] = samps
+		
+		values = [] #psi values
+		for cond in samp_conds:
+			for sample in samp_conds[cond]:
+				value = row[sample]
+				values.append(value)
+		d['value'] = values
+
+		for covcol in covariate_columns:
+			covs= [] #classifications for this covariate 
+			for samp in samps:
+				cov = sampconddf.loc[sampconddf['sample'] == samp, covcol].tolist()[0]
+				covs.append(cov)
+		if covariate_columns:
+			d[covcol] = covs
+
+		#If there is an NA psi value, we are not going to calculate a pvalue for this gene
+		p = None
+		if True in np.isnan(values):
+			p = np.nan
+		
+		conds = []
+		for cond in samp_conds:
+			conds += [cond] * len(samp_conds[cond])
+		cond1s = []
+		cond2s = []
+		for cond in conds:
+			if cond == 'cond1':
+				cond1s.append(1)
+				cond2s.append(0)
+			elif cond == 'cond2':
+				cond1s.append(0)
+				cond2s.append(1)
+		d['cond1'] = cond1s #e.g. [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+		d['cond2'] = cond2s #e.g. [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1]
+
+		d['samples'] = [x + 1 for x in range(len(samps))]
+
+		#Turn this dictionary into a DataFrame
+		rowdf = pd.DataFrame.from_dict(d)
+
+		#delta psi is difference between mean psi of two conditions (cond2 - cond1)
+		cond1meanpsi = float(format(np.mean(rowdf.query('cond1 == 1').value.dropna()), '.3f'))
+		cond2meanpsi = float(format(np.mean(rowdf.query('cond2 == 1').value.dropna()), '.3f'))
+		deltapsi = cond2meanpsi - cond1meanpsi
+		deltapsi = float(format(deltapsi, '.3f'))
+		deltapsidict[row['Gene']] = deltapsi
+
+		covariatestring = '+'.join(covariate_columns)
+
+		#Get LME pvalue, but only if we haven't already determined that the pvalue is NA because we are missing one or more psi values
+		#Lots of warnings about convergence, etc. Suppress them.
+		if not p:
+			with warnings.catch_warnings():
+				warnings.filterwarnings('ignore')
+
+				#So apparently, some combinations of psi values will give nan p values due to a LinAlgError that arises from a singular
+				#hessian matrix during the fit of the model.  However, the equivalent code in R (nlme::lme) never gives this error, even with
+				#the same data. It's not clear from just looking at the psi values why this is.  However, I found that by varying the 
+				#start_params in the fit, this can be avoided. If this is done, the resulting p value always matches what is given in R.
+				#Further, the p value is the same regardless of the start_param.
+				#But it's not clear to me why changing the start_param matters, or what the default is here or with nlme.
+				#So let's try a few starting paramters.  Regardless, this seems to affect a small number of genes (<1%), and it is causing 
+				#false negatives because genes that should get p values (may or may not be sig) are getting NA.
+				possible_start_params = [0, 0, 1, -1, 2, -2]
+				numberoftries = -1
+				for param in possible_start_params:
+					#if we already have a pvalue, don't try again
+					if p != None and not np.isnan(p):
+						break
+					#First time through, numberoftries = 0, and we are just using a placeholder startparam (0) here because we aren't even using it.
+					#Gonna use whatever the default is
+					numberoftries +=1
+					try:
+						#actual model
+						if covariate_columns:
+							covariatestring = '+'.join(covariate_columns)
+							md = smf.mixedlm('value ~ cond1' + '+' + covariatestring, data = rowdf, groups = 'samples', missing = 'drop')
+						else:
+							md = smf.mixedlm('value ~ cond1', data = rowdf, groups = 'samples', missing = 'drop')
+						if numberoftries == 0:
+							mdf = md.fit(reml = False) #REML needs to be false in order to use log-likelihood for pvalue calculation
+						elif numberoftries > 0:
+							mdf = md.fit(reml = False, start_params = [param])
+
+						#null model
+						if covariate_columns:
+							nullmd = smf.mixedlm('value ~ ' + covariatestring, data = rowdf, groups = 'samples', missing = 'drop')
+						else:
+							nullmd = smf.mixedlm('value ~ 1', data = rowdf, groups = 'samples', missing = 'drop')
+						if numberoftries == 0:
+							nullmdf = nullmd.fit(reml = False)
+						elif numberoftries > 0:
+							nullmdf = nullmd.fit(reml = False, start_params = [param])
+
+						#Likelihood ratio
+						LR = 2 * (mdf.llf - nullmdf.llf)
+						p = chi2.sf(LR, df = 1)
+
+					#These exceptions are needed to catch cases where either all psi values are nan (valueerror) or all psi values for one condition are nan (linalgerror)
+					except (ValueError, np.linalg.LinAlgError):
+						p = np.nan
+
+		pvaluedict[row['Gene']] = float('{:.2e}'.format(p))
+
+	#Correct pvalues using BH method, but only using pvalues that are not NA
+	pvalues = list(pvaluedict.values())
+	pvaluesformultitest = [pval for pval in pvalues if str(pval) != 'nan']
+	fdrs = list(multipletests(pvaluesformultitest, method = 'fdr_bh')[1])
+	fdrs = [float('{:.2e}'.format(fdr)) for fdr in fdrs]
+
+	#Now we need to incorporate the places where p = NA into the list of FDRs (also as NA)
+	fdrswithnas = []
+	fdrindex = 0
+	for pvalue in pvalues:
+		#print(pvalue)
+		if str(pvalue) != 'nan':
+			fdrswithnas.append(fdrs[fdrindex])
+			fdrindex +=1
+		elif str(pvalue) == 'nan':
+			fdrswithnas.append(np.nan)
+
+	#Add deltapsis, pvalues, and FDRs to df
+	deltapsis = list(deltapsidict.values())
+	psidf = psidf.assign(deltapsi = deltapsis)
+	psidf = psidf.assign(pval = pvalues)
+	psidf = psidf.assign(FDR = fdrswithnas)
+
+	#Write df
+	fn = os.path.abspath(psifile) + '.pval'
+	psidf.to_csv(fn, sep = '\t', index = False, float_format = '%.3g', na_rep = 'NA')		
 
 def getdpsis(psifile, samp_conds_file):
+	#Old function, superceded by getdpsis_covariate
 	#Given a table of psis, calculate dpsis and LME-based p values
 	deltapsidict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with df
 	pvaluedict = OrderedDict() #{genename : pvalue} ordered so it's easy to match it up with q values
@@ -641,7 +810,7 @@ def classifygenes(exoniccoords, gff):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi'])
+	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'test'])
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
@@ -652,6 +821,8 @@ if __name__ == '__main__':
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
 	parser.add_argument('--sampconds', type = str, help = 'Needed for calculatepsi. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
+	parser.add_argument('--conditionA', type = str, help = 'Condition A. deltapsi will be calculated as B-A. Must be a value in the \'condition\' column of the sampconds file.')
+	parser.add_argument('--conditionB', type = str, help = 'Condition B. deltapsi will be calculated as B-A. Must be a value in the \'condition\' column of the sampconds file.')
 	args = parser.parse_args()
 
 
@@ -720,4 +891,4 @@ if __name__ == '__main__':
 		genetypedf.columns = ['Gene', 'genetype']
 		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
 		finalpsidf.to_csv('LABRAT.psis', sep = '\t', index = False, na_rep = 'NA')
-		getdpsis('LABRAT.psis', args.sampconds)
+		getdpsis_covariate('LABRAT.psis', args.sampconds, args.conditionA, args.conditionB)
