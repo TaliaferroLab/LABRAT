@@ -404,6 +404,10 @@ def getdpsis_covariate(psifile, samp_conds_file, conditionA, conditionB):
 	condasamps = sampconddf.loc[sampconddf['condition'] == conditionA, 'sample'].tolist()
 	condbsamps = sampconddf.loc[sampconddf['condition'] == conditionB, 'sample'].tolist()
 
+	#Reorder columns of psidf
+	colorder = ['Gene'] + condasamps + condbsamps + ['genetype']
+	psidf = psidf[colorder]
+
 	print('Condition A samples: ' + (', ').join(condasamps))
 	print('Condition B samples: ' + (', ').join(condbsamps))
 
