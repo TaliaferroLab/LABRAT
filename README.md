@@ -114,6 +114,8 @@ The output of this step will be directories containing salmon quantification fil
 
 The final step is the calculation of 𝜓 values for each gene in each sample, and the identification of genes that show significantly different 𝜓 values across conditions.  Transcripts whose 3' ends are less than 25 nt from each other are grouped together during this step and counted as using the same polyadenylation site.
 
+salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides, optionally, one called 'txfasta.idx'.**
+
 sampconds is a tab-delimited file with a column header row that gives information about the samples. Column names are strict, and the first two columns are required. The first column should be named '**sample**' and contain the names of every sample to be compared. These sample names should match those given to runSalmon with ```--samplename```. The second column should be named '**condition**' and should contain two factors identifying the grouping of the samples for the comparison of interest.  These factors must also be given as the arguments **--conditionA** and **--conditionB**.  Delta 𝜓 values will be reported as B-A.  Additional columns representing covariates can be included, but not are not requried. Covariate column names must contain 'covariate' within them. A sample sampconds file is provided below.
 
 | sample | condition | covariate1 |
@@ -124,9 +126,7 @@ sampconds is a tab-delimited file with a column header row that gives informatio
 | Liver_F1 | Liver | F |
 | Liver_F2 | Liver | F |
 
-
-
-salmondir should be a directory that contains **ALL** of the salmon output directories created by runSalmon. **It should contain no other directories besides, optionally, one called 'txfasta.idx'.**
+LABRAT compares 𝜓 values of experimental replicates across experimental conditions to identify genes with statistically significantly different 𝜓 values between conditions.  This is done using a mixed linear effects model that tests the relationship between 𝜓 values and experimental condition. A null model is also created in which the term denoting the experimental condition has been removed.  A likelihood ratio test compares the goodness of fit of these two models to the observed data and assigns a p value for the probability that the real model is a better fit than the null model. In simple comparisons between two conditions, this approach mimics a t-test.  However, this technique has the advantage of being able to easily incorporate covariates into significance testing.  After performing this test on all genes, the raw p values are corrected for multiple hypothesis testing using a Benjamini-Hochsberg correction.
 
 ```
 python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff>
@@ -139,10 +139,4 @@ The main output file is named '**LABRAT.psis.pval**'. It contains the 𝜓 value
 Additionally, this file contains a column called 'genetype'. This contains information about whether the alternative polyadenylation sites in this gene are contained within the same exon (TUTR) or within different exons (ALE). If there are only 2 APA sites for this gene, the gene must be labeled as either TUTR or ALE.  If there are more than 2, if *all* sites are contained within either the same exon, the gene is labeled TUTR.  If *all* sites are contained within different exons, it is labeled ALE. If neither of these is true, the gene is labeled 'mixed'.
 
 A secondary output file is name **'numberofposfactors.txt'**.  This file contains information about the transcripts that were assigned to each APA site. The column 'numberofposfactors' indicates the number of distinct (separated by at least 25 nt) APA sites found for this gene. The column 'txids' has the IDs of the transcripts assigned to each APA site.  APA sites are separated by underscores and transcripts assigned to the same site are separated by commas. In this column, APA sites are ordered from most upstream to most downstream.  The final column contains the distance between the APA sites, but only if the gene contains just 2 sites.
-
-## Advanced Usage
-
-LABRAT identifies genes with significantly different 𝜓 values across conditions using a linear mixed effects model. When you are simply comparing across conditions, this is essentially a t-test. However, an advantage of this approach is that it allows for the inclusion of covariates when testing for significance. This has been tested and does seem to work, although currently, incorporating covariates requires editing the code directly (see the model formulae in the getdpsis() function).
-
-Future releases aim to incorporate this in a more user-friendly fashion.
 
