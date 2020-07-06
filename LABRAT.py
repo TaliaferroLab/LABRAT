@@ -438,13 +438,15 @@ def getdpsis_covariate(psifile, samp_conds_file, conditionA, conditionB):
 				values.append(value)
 		d['value'] = values
 
-		for covcol in covariate_columns:
-			covs= [] #classifications for this covariate 
-			for samp in samps:
-				cov = sampconddf.loc[sampconddf['sample'] == samp, covcol].tolist()[0]
-				covs.append(cov)
 		if covariate_columns:
-			d[covcol] = covs
+			for covcol in covariate_columns:
+				covs= [] #classifications for this covariate 
+				for samp in samps:
+					cov = sampconddf.loc[sampconddf['sample'] == samp, covcol].tolist()[0]
+					covs.append(cov)
+				d[covcol] = covs
+
+			covariatestring = '+'.join(covariate_columns)
 
 		#If there is an NA psi value, we are not going to calculate a pvalue for this gene
 		p = None
@@ -506,7 +508,6 @@ def getdpsis_covariate(psifile, samp_conds_file, conditionA, conditionB):
 					try:
 						#actual model
 						if covariate_columns:
-							covariatestring = '+'.join(covariate_columns)
 							md = smf.mixedlm('value ~ cond1' + '+' + covariatestring, data = rowdf, groups = 'samples', missing = 'drop')
 						else:
 							md = smf.mixedlm('value ~ cond1', data = rowdf, groups = 'samples', missing = 'drop')
