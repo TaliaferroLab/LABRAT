@@ -873,6 +873,24 @@ if __name__ == '__main__':
 		positionfactors = getpositionfactors(args.gff, 25)
 		print('Done with position factors!')
 		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d)) and d != 'txfasta.idx']
+		
+		#We want to filter salmondirs to only take samples with mapping rates > x.
+		salmondirs_mappingpass = []
+		for sd in salmondirs:
+			logfile = os.path.join(sd, 'logs', 'salmon_quant.log')
+			with open(logfile, 'r') as infh:
+				for line in infh:
+					line = line.strip().split()
+					if len(line) < 8:
+						continue
+					if line[4] == 'Mapping' and line[5] == 'rate':
+						mappingrate = float(line[7].strip('%'))
+						if mappingrate >= 40:
+							salmondirs_mappingpass.append(sd)
+
+		print('Of {0} samples, {1} pass the mapping rate filter.'.format(len(salmondirs), len(salmondirs_mappingpass)))
+		salmondirs = salmondirs_mappingpass
+		
 		psidfs = []
 		for sd in salmondirs:
 			samplename = os.path.basename(sd)
