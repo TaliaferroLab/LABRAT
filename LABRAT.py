@@ -1,3 +1,5 @@
+#This is TCGA branch
+
 import gffutils
 import os
 import sys
@@ -17,6 +19,7 @@ from statsmodels.stats.multitest import multipletests
 from scipy.stats.distributions import chi2
 import warnings
 import time
+import pickle
 
 #For every gene, the goal is to define what the overall usage of proximal/distal polyA sites is.  This is done by defining 
 #a "psi" value for every gene.  For each transcript in a gene, the "terminal fragment" (TF) is the last two
@@ -355,8 +358,8 @@ def calculatepsi(positionfactors, salmondir):
 	#Read in salmonout file
 	#salmondir is the salmon output directory
 	print('Calculating psi values for {0}...'.format(salmondir))
-	salmonoutfile = os.path.join(os.path.abspath(salmondir), 'quant.sf')
-	with open(salmonoutfile, 'r') as infh:
+	salmonoutfile = os.path.join(os.path.abspath(salmondir), 'quant.sf.gz')
+	with gzip.open(salmonoutfile, 'rt') as infh:
 		for line in infh:
 			line = line.strip().split('\t')
 			#Skip header
@@ -815,7 +818,7 @@ def classifygenes(exoniccoords, gff):
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'test'])
+	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi'])
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
@@ -870,48 +873,56 @@ if __name__ == '__main__':
 
 	elif args.mode == 'calculatepsi':
 		print('Calculating position factors for every transcript...')
-		positionfactors = getpositionfactors(args.gff, 25)
+		#positionfactors = getpositionfactors(args.gff, 25)
 		print('Done with position factors!')
-		salmondirs = [os.path.join(os.path.abspath(args.salmondir), d) for d in os.listdir(args.salmondir) if os.path.isdir(os.path.join(os.path.abspath(args.salmondir), d)) and d != 'txfasta.idx']
-		
-		#We want to filter salmondirs to only take samples with mapping rates > x.
-		salmondirs_mappingpass = []
-		for sd in salmondirs:
-			logfile = os.path.join(sd, 'logs', 'salmon_quant.log')
-			with open(logfile, 'r') as infh:
-				for line in infh:
-					line = line.strip().split()
-					if len(line) < 8:
-						continue
-					if line[4] == 'Mapping' and line[5] == 'rate':
-						mappingrate = float(line[7].strip('%'))
-						if mappingrate >= 40:
-							salmondirs_mappingpass.append(sd)
+		#with open('positionfactors.pkl', 'wb') as picklefh:
+			#pickle.dump(positionfactors, picklefh)
 
-		print('Of {0} samples, {1} pass the mapping rate filter.'.format(len(salmondirs), len(salmondirs_mappingpass)))
-		salmondirs = salmondirs_mappingpass
-		
-		psidfs = []
-		for sd in salmondirs:
-			samplename = os.path.basename(sd)
+		with open('positionfactors.pkl', 'rb') as pickleinfh:
+			positionfactors = pickle.load(pickleinfh)
+
+		for tumor in ['ACC', 'BLCA', 'BRCA', 'CESC', 'CHOL', 'COAD', 'DLBC', 'ESCA', 'GBM', 'HNSC', 'KICH', 'KIRC', 'KIRP', 'LAML', 'LGG', 'LIHC', 'LUAD', 'LUSC', 'MESO', 'OV', 'PAAD', 'PCPG', 'PRAD', 'READ', 'SARC', 'SKCM', 'STAD', 'TGCT', 'THCA', 'THYM', 'UCEC', 'UCS', 'UVM']:
+			print('Running LABRAT on {0}...'.format(tumor))
+			tumordir = os.path.join('/beevol/home/taliaferro/data/TXpsi/TCGA/OnlyPCTxs/TumorOnly/tcga_out', tumor, 'TFseqs')
+
+			salmondirs = [os.path.join(os.path.abspath(tumordir), d) for d in os.listdir(tumordir) if os.path.isdir(os.path.join(os.path.abspath(tumordir), d)) and d != 'txfasta.idx']
 			
-			#For ENCODE
-			#samplename = os.path.basename(sd).split('_')
-			#samplename = ('_rep').join([samplename[0], samplename[1]])
+			#We want to filter salmondirs to only take samples with mapping rates > x.
+			salmondirs_mappingpass = []
+			for sd in salmondirs:
+				logfile = os.path.join(sd, 'logs', 'salmon_quant.log')
+				with open(logfile, 'r') as infh:
+					for line in infh:
+						line = line.strip().split()
+						if len(line) < 8:
+							continue
+						if line[4] == 'Mapping' and line[5] == 'rate':
+							mappingrate = float(line[7].strip('%'))
+							if mappingrate >= 30:
+								salmondirs_mappingpass.append(sd)
+
+			print('Of {0} samples, {1} pass the mapping rate filter.'.format(len(salmondirs), len(salmondirs_mappingpass)))
+			salmondirs = salmondirs_mappingpass
 			
-			psis = calculatepsi(positionfactors, sd)
-			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
-			psidf.reset_index(level = 0, inplace = True)
-			psidf.columns = ['Gene', samplename]
-			psidfs.append(psidf)
-		bigpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), psidfs)
-		
-		#Add in genetypes (ALE or TUTR or mixed)
-		exoniccoords = getexoniccoords(positionfactors, args.gff)
-		genetypes = classifygenes(exoniccoords, args.gff)
-		genetypedf = pd.DataFrame.from_dict(genetypes, orient = 'index')
-		genetypedf.reset_index(level = 0, inplace = True)
-		genetypedf.columns = ['Gene', 'genetype']
-		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
-		finalpsidf.to_csv('LABRAT.psis', sep = '\t', index = False, na_rep = 'NA')
-		getdpsis_covariate('LABRAT.psis', args.sampconds, args.conditionA, args.conditionB)
+			psidfs = []
+			for sd in salmondirs:
+				samplename = os.path.basename(sd)
+				
+				
+				psis = calculatepsi(positionfactors, sd)
+				psidf = pd.DataFrame.from_dict(psis, orient = 'index')
+				psidf.reset_index(level = 0, inplace = True)
+				psidf.columns = ['Gene', samplename.split('_')[0]]
+				psidfs.append(psidf)
+			bigpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), psidfs)
+			
+			#Add in genetypes (ALE or TUTR or mixed)
+			exoniccoords = getexoniccoords(positionfactors, args.gff)
+			genetypes = classifygenes(exoniccoords, args.gff)
+			genetypedf = pd.DataFrame.from_dict(genetypes, orient = 'index')
+			genetypedf.reset_index(level = 0, inplace = True)
+			genetypedf.columns = ['Gene', 'genetype']
+			finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
+			finalpsidf.to_csv('LABRAT.{0}.psis'.format(tumor), sep = '\t', index = False, na_rep = 'NA')
+			#Dont calculate FDRs for now.
+			#getdpsis_covariate('LABRAT.psis', args.sampconds, args.conditionA, args.conditionB)
