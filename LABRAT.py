@@ -1,3 +1,5 @@
+#This is gtex branch
+
 import gffutils
 import os
 import sys
@@ -355,8 +357,13 @@ def calculatepsi(positionfactors, salmondir):
 	#Read in salmonout file
 	#salmondir is the salmon output directory
 	print('Calculating psi values for {0}...'.format(salmondir))
-	salmonoutfile = os.path.join(os.path.abspath(salmondir), 'quant.sf')
-	with open(salmonoutfile, 'r') as infh:
+	salmonoutfile = os.path.join(os.path.abspath(salmondir), 'quant.sf.gz')
+
+	#Sometimes there is no quant.sf.gz file for some reason
+	if not os.path.isfile(salmonoutfile):
+		return None
+
+	with gzip.open(salmonoutfile, 'rt') as infh:
 		for line in infh:
 			line = line.strip().split('\t')
 			#Skip header
@@ -869,6 +876,32 @@ if __name__ == '__main__':
 				runSalmon(args.threads, freads, None, samplename)
 
 	elif args.mode == 'calculatepsi':
+		
+		#Get relationship of SRR IDs and tissues
+		tissuecounts = {} #{tissue : number of samples}
+		tissueids = {} #{SRR: tissue ID (e.g. Brain_1 or Liver_2)}
+		with gzip.open('/beevol/home/taliaferro/data/TXpsi/GTEx/gtex_meta.tsv.gz', 'rt') as infh:
+			for line in infh:
+				line = line.strip().split('\t')
+				if line[0] == 'Run':
+					continue
+				srrid = line[0]
+				hist = line[1].replace(' ', '_')
+				if len(line[2].split(' - ' )) ==2:
+					bodysite = line[2].split(' - ')[1].replace(' ', '_')
+				else:
+					bodysite = line[2]
+				tissue = hist + '|' + bodysite
+				if tissue not in tissuecounts:
+					tissuecount = 1
+					tissuecounts[tissue] = 1
+					tissueids[srrid] = tissue + '-' + str(tissuecount)
+				elif tissue in tissuecounts:
+					tissuecount = tissuecounts[tissue]
+					tissuecounts[tissue] +=1
+					tissueids[srrid] = tissue + '-' + str(tissuecount)
+
+
 		print('Calculating position factors for every transcript...')
 		positionfactors = getpositionfactors(args.gff, 25)
 		print('Done with position factors!')
@@ -885,7 +918,7 @@ if __name__ == '__main__':
 						continue
 					if line[4] == 'Mapping' and line[5] == 'rate':
 						mappingrate = float(line[7].strip('%'))
-						if mappingrate >= 40:
+						if mappingrate >= 30:
 							salmondirs_mappingpass.append(sd)
 
 		print('Of {0} samples, {1} pass the mapping rate filter.'.format(len(salmondirs), len(salmondirs_mappingpass)))
@@ -894,12 +927,18 @@ if __name__ == '__main__':
 		psidfs = []
 		for sd in salmondirs:
 			samplename = os.path.basename(sd)
+			#Replace with tissueid
+			samplename = tissueids[samplename.split('_')[0]]
 			
 			#For ENCODE
 			#samplename = os.path.basename(sd).split('_')
 			#samplename = ('_rep').join([samplename[0], samplename[1]])
 			
 			psis = calculatepsi(positionfactors, sd)
+			#If there was no quant.sf.gz file, None is returned from calculatepsi
+			if not psis:
+				continue
+
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)
 			psidf.columns = ['Gene', samplename]
@@ -914,4 +953,4 @@ if __name__ == '__main__':
 		genetypedf.columns = ['Gene', 'genetype']
 		finalpsidf = reduce(lambda x, y: pd.merge(x, y, on = 'Gene'), [bigpsidf, genetypedf])
 		finalpsidf.to_csv('LABRAT.psis', sep = '\t', index = False, na_rep = 'NA')
-		getdpsis_covariate('LABRAT.psis', args.sampconds, args.conditionA, args.conditionB)
+		#getdpsis_covariate('LABRAT.psis', args.sampconds, args.conditionA, args.conditionB)
