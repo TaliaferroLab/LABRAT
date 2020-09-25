@@ -880,7 +880,7 @@ if __name__ == '__main__':
 		#Get relationship of SRR IDs and tissues
 		tissuecounts = {} #{tissue : number of samples}
 		tissueids = {} #{SRR: tissue ID (e.g. Brain_1 or Liver_2)}
-		with gzip.open('/beevol/home/taliaferro/data/TXpsi/GTEx/gtex_meta.tsv.gz', 'rt') as infh, open('/beevol/home/taliaferro/data/TXpsi/GTEx/gtex_exclude', 'r') as maskfh, open('maskedtissueids.txt', 'w') as outfh:
+		with gzip.open('/beevol/home/taliaferro/data/TXpsi/GTEx/gtex_meta.tsv.gz', 'rt') as infh, open('/beevol/home/taliaferro/data/TXpsi/GTEx/gtex_exclude.txt', 'r') as maskfh, open('maskedtissueids.txt', 'w') as outfh:
 			#maskfh contains a list of srr ids that were mistakenly annotated as RNAseq
 			#when in fact they are WGS or WES. We need to exclude them from analysis
 			maskedsrrs = []
@@ -909,7 +909,7 @@ if __name__ == '__main__':
 					tissueids[srrid] = tissue + '-' + str(tissuecount)
 
 				if srrid in maskedsrrs:
-					outfh.write(tissue + '-' + str(tissuecount))
+					outfh.write(tissue + '-' + str(tissuecount) +'\n')
 
 
 		print('Calculating position factors for every transcript...')
