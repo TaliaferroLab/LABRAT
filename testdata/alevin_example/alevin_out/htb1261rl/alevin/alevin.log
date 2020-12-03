@@ -1,0 +1,28 @@
+[2020-11-22 21:53:21.533] [alevinLog] [info] Loading Header
+[2020-11-22 21:53:21.533] [alevinLog] [info] Loading Transcript Info 
+[2020-11-22 21:53:21.600] [alevinLog] [info] Found all transcripts to gene mappings
+[2020-11-22 21:53:21.612] [alevinLog] [info] Processing barcodes files (if Present) 
+
+ 
+[2020-11-22 22:04:12.925] [alevinLog] [info] Done barcode density calculation.
+[2020-11-22 22:04:12.925] [alevinLog] [info] # Barcodes Used: [32m224260950[0m / [31m224286895[0m.
+[2020-11-22 22:04:12.927] [alevinLog] [info] Done importing white-list Barcodes
+[2020-11-22 22:04:12.927] [alevinLog] [info] Total 1845 white-listed Barcodes
+[2020-11-22 22:04:13.507] [alevinLog] [warning] Total 50.2336% reads will be thrown away because of noisy Cellular barcodes.
+[2020-11-22 22:04:13.662] [alevinLog] [info] Done populating Z matrix
+[2020-11-22 22:04:13.684] [alevinLog] [info] Total 63730 CB got sequence corrected
+[2020-11-22 22:04:13.691] [alevinLog] [info] Done indexing Barcodes
+[2020-11-22 22:04:13.691] [alevinLog] [info] Total Unique barcodes found: 3744266
+[2020-11-22 22:04:13.691] [alevinLog] [info] Used Barcodes except Whitelist: 63648
+[2020-11-22 22:04:13.768] [alevinLog] [info] Done with Barcode Processing; Moving to Quantify
+
+[2020-11-22 22:04:13.768] [alevinLog] [info] parsing read library format
+[2020-11-22 22:30:09.894] [alevinLog] [info] Starting optimizer
+
+
+[2020-11-22 22:30:10.612] [alevinLog] [warning] mrna file not provided; using is 1 less feature for whitelisting
+[2020-11-22 22:30:10.612] [alevinLog] [warning] rrna file not provided; using is 1 less feature for whitelisting
+[2020-11-22 22:30:44.579] [alevinLog] [info] Total 12566920.00 UMI after deduplicating.
+[2020-11-22 22:30:44.579] [alevinLog] [info] Total 1601781 BiDirected Edges.
+[2020-11-22 22:30:44.579] [alevinLog] [info] Total 139051 UniDirected Edges.
+[2020-11-22 22:30:44.599] [alevinLog] [info] Finished optimizer

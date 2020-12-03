@@ -1,0 +1,19 @@
+[2020-11-22 21:20:57.459] [jointLog] [info] Fragment incompatibility prior below threshold.  Incompatible fragments will be ignored.
+[2020-11-22 21:20:57.459] [jointLog] [info] Usage of --validateMappings implies use of minScoreFraction. Since not explicitly specified, it is being set to 0.65
+[2020-11-22 21:20:57.459] [jointLog] [info] Usage of --validateMappings, without --hardFilter implies use of range factorization. rangeFactorizationBins is being set to 4
+[2020-11-22 21:20:57.459] [jointLog] [info] Usage of --validateMappings implies a default consensus slack of 0.2. Setting consensusSlack to 0.2.
+[2020-11-22 21:20:57.459] [jointLog] [info] Using default value of 0.87 for minScoreFraction in Alevin
+Using default value of 0.6 for consensusSlack in Alevin
+[2020-11-22 21:29:21.736] [jointLog] [info] There is 1 library.
+[2020-11-22 21:29:21.801] [jointLog] [info] Loading Quasi index
+[2020-11-22 21:29:21.801] [jointLog] [info] Loading 32-bit quasi index
+[2020-11-22 21:29:24.353] [jointLog] [info] done
+[2020-11-22 21:29:24.353] [jointLog] [info] Index contained 58,397 targets
+[2020-11-22 22:05:24.711] [jointLog] [info] Computed 47,450 rich equivalence classes for further processing
+[2020-11-22 22:05:24.711] [jointLog] [info] Counted 48,934,016 total reads in the equivalence classes 
+[2020-11-22 22:05:24.712] [jointLog] [info] Number of fragments discarded because they are best-mapped to decoys : 0
+[2020-11-22 22:05:24.712] [jointLog] [warning] Found 39503 reads with `N` in the UMI sequence and ignored the reads.
+Please report on github if this number is too large
+[2020-11-22 22:05:24.712] [jointLog] [info] Mapping rate = 25.2717%
+
+[2020-11-22 22:05:24.712] [jointLog] [info] finished quantifyLibrary()
