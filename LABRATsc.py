@@ -33,7 +33,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
 
     base_location = os.path.join(base_dir, "alevin")
     
-    print(base_location)
+    #print(base_location)
     if not os.path.exists(base_location):
         print("{} directory doesn't exist".format( base_location ))
         sys.exit(1)
@@ -138,7 +138,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
     barcodes = [os.path.basename(os.path.abspath(base_dir)) + '_' + b for b in barcodes]
     alv = alv.set_index([barcodes])
 
-    return alv
+    return alv.head(n = 100) #only 100 cells for now
 
 def createbigdf(alevindir):
     #Given a directory (alevindir) that contains alevin output subdirectories
@@ -171,8 +171,147 @@ def createbigdf(alevindir):
         dfs.append(df)
 
     bigdf = pd.concat(dfs)
+    bigdf = bigdf.reset_index()
+    bigdf = bigdf.rename(columns = {'index': 'cellid'})
 
     return bigdf
+
+def addclusters(bigdf, clusters):
+	#Add labels of cluster ID to df of counts
+	clusterdf = pd.read_csv(clusters, sep = '\t', header = 0, index_col = None)
+	clusterdf = clusterdf.rename(columns = {'sample' : 'cellid'})
+	newbigdf = pd.merge(clusterdf, bigdf, how = 'inner', on = 'cellid')
+	
+	return newbigdf
+
+def collapseclusters(bigdf):
+	#Sum transcript counts across every cell in a cluster
+	conditions = list(set(bigdf['condition'].tolist()))
+	allcountsums = [] #list of countsums dictionaries, in order of conditions
+	for condition in conditions:
+		countsums = {} #{transcriptid : countsum}
+		countsums['condition'] = condition
+		df = bigdf.loc[bigdf['condition'] == condition]
+		colnames = list(df)
+		#select only transcriptID columns
+		colnames = [c for c in colnames if c != 'cellid' and c != 'condition']
+		for c in colnames:
+			counts = df[c].tolist()
+			sumcounts = sum(counts)
+			countsums[c] = [sumcounts]
+		allcountsums.append(countsums)
+
+	#Turn the countsum dictionaries into dfs
+	dfs = []
+	for countsum in allcountsums:
+		df = pd.DataFrame.from_dict(countsum)
+		dfs.append(df)
+
+	#Concatenate dfs
+	countsumdf = pd.concat(dfs)
+
+	return countsumdf
+
+def calculatepsi_fromcollapsedclusters(countsumdf, posfactors):
+	#Calculate psi values for every gene in posfactors
+	#This function takes a df that has one row per cluster/condition
+	#that was produced by collapseclusters().
+
+	conditions = countsumdf['condition'].tolist()
+	allpsidicts = [] #list of all psidicts
+
+	for condition in conditions:
+		df = countsumdf.loc[countsumdf['condition'] == condition]
+		psidict = {} #{gene : psi}
+		psidict['condition'] = condition
+		for gene in posfactors:
+			geneid = gene.split('.')[0]
+			rawcounts = []
+			scaledcounts = []
+			for tx in posfactors[gene]:
+				txid = tx.split('.')[0]
+				m = posfactors[gene][tx]
+				counts = df[txid].tolist()[0]
+				scaled_counts = counts * m
+				rawcounts.append(counts)
+				scaledcounts.append(scaled_counts)
+
+			if sum(rawcounts) <= 0: #add count filter here
+				psi = 'NA'
+			else:
+				psi = sum(scaledcounts) / sum(rawcounts)
+			
+			psidict[geneid] = [psi]
+		
+		allpsidicts.append(psidict)
+
+	#Turn the psidicts into dfs
+	dfs = []
+	for psidict in allpsidicts:
+		df = pd.DataFrame.from_dict(psidict)
+		dfs.append(df)
+
+	#Concatenate dfs
+	psidf = pd.concat(dfs)
+
+	return psidf
+
+def calculatepsi_cellbycell(bigdf, posfactors):
+	#Calculate psi values for every gene in every cell
+	#In practice, this is not going to be super useful because many
+	#gene level counts are going to be 0, giving a psi of NA
+	#This function takes a df of transcript counts per cell (produced by createbigdf() and addclusters())
+	
+	#Make a small df of just cellid and condition
+	conditiondf = bigdf[['cellid', 'condition']]
+	
+	allpsidicts = {} #{cellid : {gene : psi}}
+	cellcount = 0
+
+	for idx, row in bigdf.iterrows():
+		cellcount +=1
+		if cellcount % 10 == 0:
+			print('Calculating psi for cell {0}'.format(cellcount))
+		cellid = row['cellid']
+		allpsidicts[cellid] = {}
+		for gene in posfactors:
+			geneid = gene.split('.')[0]
+			rawcounts = []
+			scaledcounts = []
+			for tx in posfactors[gene]:
+				txid = tx.split('.')[0]
+				m = posfactors[gene][tx]
+				counts = row[txid]
+				scaled_counts = counts * m
+				rawcounts.append(counts)
+				scaledcounts.append(scaled_counts)
+
+			if sum(rawcounts) <= 0: #add counter filter here
+				psi = 'NA'
+			else:
+				psi = sum(scaledcounts) / sum(rawcounts)
+
+			allpsidicts[cellid][geneid] = psi
+
+	#Turn nested dict into df
+	df = pd.concat({k: pd.DataFrame.from_dict(v, 'index') for k, v in allpsidicts.items()}, axis = 1)
+	df = df.transpose()
+	#drop first index and get second (cellid) as column name
+	df.reset_index(level = 1, inplace = True, drop = True)
+	df.index.name = 'cellid'
+	df.reset_index(level = 0, inplace = True)
+
+	#Merge condition column back in
+	df = pd.merge(conditiondf, df, how = 'inner', on = 'cellid')
+
+	return df
+
+	
+
+
+		
+
+	
 
 
 #For every gene, the goal is to define what the overall usage of proximal/distal polyA sites is.  This is done by defining 
@@ -399,12 +538,17 @@ def getpositionfactors(gff, lengthfilter):
 
     
 
-#alv = read_quants_bin(sys.argv[1], False, 'data')
-#print(alv.head())
-createbigdf(sys.argv[1])
-posfactors = getpositionfactors(sys.argv[2], 25)
-with open('posfactors.pkl', 'wb') as outfh:
-    pickle.dump(posfactors, outfh)
+#bigdf = createbigdf(sys.argv[1])
+#bigdf.to_csv('bigdf.txt', sep = '\t', header = True, index = True)
+bigdf = pd.read_csv('bigdf.txt.gz', sep = '\t', header = 0, index_col = 0, compression = 'gzip')
+#posfactors = getpositionfactors(sys.argv[2], 25)
+#with open('posfactors.pkl', 'wb') as outfh:
+#    pickle.dump(posfactors, outfh)
 with open('posfactors.pkl', 'rb') as infh:
-    posfactors = pickle.load(infh)
-print(posfactors)
+   posfactors = pickle.load(infh)
+
+bigdf = addclusters(bigdf, sys.argv[2])
+#countsumdf = collapseclusters(bigdf)
+#psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
+
+psidf = calculatepsi_cellbycell(bigdf, posfactors)
