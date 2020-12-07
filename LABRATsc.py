@@ -256,6 +256,31 @@ def calculatepsi_fromcollapsedclusters(countsumdf, posfactors):
 
 	return psidf
 
+def calculatedpsi_fromcollapsedclusters(psidf, conditionA, conditionB):
+	#Given a dataframe of psi values (from calculatepsi_fromcollapsedclusters()),
+	#calculate a dpsi value for each gene
+
+	#dpsi is defined as conditionB - conditionA
+	
+	dpsis = {} #{gene : dpsi}
+	colnames = list(psidf.columns.values)
+	colnames = [c for c in colnames if c != 'condition']
+
+	for gene in colnames:
+		condApsi = psidf.loc[psidf['condition'] == conditionA].at[0, gene]
+		condBpsi = psidf.loc[psidf['condition'] == conditionB].at[0, gene]
+		if condApsi == 'NA' or condBpsi == 'NA':
+			dpsi = 'NA'
+		else:
+			dpsi = round(condBpsi - condApsi, 3)
+		dpsis[gene] = [dpsi]
+
+	df = pd.DataFrame.from_dict(dpsis)
+
+	print(df.head())
+
+
+
 def calculatepsi_cellbycell(bigdf, posfactors):
 	#Calculate psi values for every gene in every cell
 	#In practice, this is not going to be super useful because many
@@ -548,7 +573,9 @@ with open('posfactors.pkl', 'rb') as infh:
    posfactors = pickle.load(infh)
 
 bigdf = addclusters(bigdf, sys.argv[2])
-#countsumdf = collapseclusters(bigdf)
-#psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
+countsumdf = collapseclusters(bigdf)
+psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
+print(psidf.head())
+calculatedpsi_fromcollapsedclusters(psidf, 'Relapse', 'Diagnosis')
 
-psidf = calculatepsi_cellbycell(bigdf, posfactors)
+#psidf = calculatepsi_cellbycell(bigdf, posfactors)
