@@ -6,9 +6,10 @@ import pandas as pd
 import gzip
 import sys
 import os
-#import sce
 from scipy.io import mmread
 from scipy.sparse import csr_matrix
+from scipy.stats import ranksums
+from statsmodels.stats.multitest import multipletests
 import gffutils
 import pickle
 
@@ -138,7 +139,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
     barcodes = [os.path.basename(os.path.abspath(base_dir)) + '_' + b for b in barcodes]
     alv = alv.set_index([barcodes])
 
-    return alv.head(n = 100) #only 100 cells for now
+    return alv.head(n = 50) #only 50 cells for now
 
 def createbigdf(alevindir):
     #Given a directory (alevindir) that contains alevin output subdirectories
@@ -277,7 +278,99 @@ def calculatedpsi_fromcollapsedclusters(psidf, conditionA, conditionB):
 
 	df = pd.DataFrame.from_dict(dpsis)
 
-	print(df.head())
+	return df
+
+def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, conditionA, conditionB):
+	#Given a dataframe of counts per cell (usually bigdf, produced by addclusters())
+	#for each condition (cluster), randomly select x% of the cells. Then collapse the clusters
+	#and calculate psivalues using collapseclusters() and calculatepsi_fromcollapsedclusters()
+	#Record psi for each gene in each cluster.
+	#Repeat n times
+	#Compare psi values across clusters to derive p value
+
+	condAdf = bigdf.loc[bigdf['condition'] == conditionA]
+	condBdf = bigdf.loc[bigdf['condition'] == conditionB]
+
+	condApsis = {} #{gene : [psi values from samples]}
+	condBpsis = {} #{gene : [psi values from samples]}
+
+	for i in range(numberofsamples):
+		print('Sample ' + str(i))
+		#sample rows (cells)
+		condAsamp = condAdf.sample(frac = fractosample, replace = False, axis = 'index')
+		condBsamp = condBdf.sample(frac = fractosample, replace = False, axis = 'index')
+		#Put the condA and condB back together again
+		df = pd.concat([condAsamp, condBsamp], axis = 0, ignore_index = True)
+		collapseddf = collapseclusters(df)
+		psidf = calculatepsi_fromcollapsedclusters(collapseddf, posfactors)
+		
+		#Record psi values for each gene
+		colnames = list(psidf.columns.values)
+		genes = [c for c in colnames if c != 'condition']
+		for gene in genes:
+			condApsi = psidf.loc[psidf['condition'] == conditionA].at[0, gene]
+			condBpsi = psidf.loc[psidf['condition'] == conditionB].at[0, gene]
+			if gene not in condApsis:
+				condApsis[gene] = [condApsi]
+			else:
+				condApsis[gene].append(condApsi)
+			if gene not in condBpsis:
+				condBpsis[gene] = [condBpsi]
+			else:
+				condBpsis[gene].append(condBpsi)
+
+	#Test if sampled psis are different across conditions
+	#wilcoxon rank sum test
+	pvals = {} #{gene : pval}
+	for gene in genes:
+		Apsis = condApsis[gene]
+		Bpsis = condBpsis[gene]
+		Apsis = [psi for psi in Apsis if psi != 'NA']
+		Bpsis = [psi for psi in Bpsis if psi != 'NA']
+
+		#if either is just NAs, p = NA
+		if not Apsis or not Bpsis:
+			p = 'NA'
+		else:
+			p = ranksums(Apsis, Bpsis)[1]
+			p = round(float('{:.2e}'.format(p)), 3)			
+		pvals[gene] = p
+
+	
+	#Correct pvalues using BH method, but only using pvalues that are not NA
+	genes = list(pvals.keys())
+	pvalues = list(pvals.values())
+	pvaluesformultitest = [pval for pval in pvalues if str(pval) != 'NA']
+	fdrs = list(multipletests(pvaluesformultitest, method = 'fdr_bh')[1])
+	fdrs = [float('{:.2e}'.format(fdr)) for fdr in fdrs]
+
+	#Now we need to incorporate the places where p = NA into the list of FDRs (also as NA)
+	fdrswithnas = []
+	fdrindex = 0
+	for pvalue in pvalues:
+		if str(pvalue) != 'NA':
+			fdrswithnas.append(fdrs[fdrindex])
+			fdrindex +=1
+		elif str(pvalue) == 'NA':
+			fdrswithnas.append(np.nan)
+	fdrswithnas = [[fdr] for fdr in fdrswithnas] #fdr must be in list for conversion to df
+
+	correctedpvals = dict(zip(genes, fdrswithnas))
+
+	#make df of pval and FDR
+	pvalues = [[p] for p in pvalues] #p must be in list for conversion to df
+	pvals = dict(zip(genes, pvalues))
+	rawpdf = pd.DataFrame.from_dict(pvals, orient = 'index')
+	rawpdf.columns = ['raw_pval']
+	fdrdf = pd.DataFrame.from_dict(correctedpvals, orient = 'index')
+	fdrdf.columns = ['fdr']
+
+	#Merge rawpdf and fdrdf
+	df = rawpdf.merge(fdrdf, how = 'inner', left_index = True, right_index = True)
+
+	return df	
+
+
 
 
 
@@ -331,7 +424,73 @@ def calculatepsi_cellbycell(bigdf, posfactors):
 
 	return df
 
-	
+def dotest_cellbycell(psidf):
+	#Given a matrix of psi values for every gene in every cell (psidf)
+	#in which the cells have been split into 2 conditions (column condition)
+	#perform a statistical test	to ask whether the psi values for a gene are 
+	#different across conditons. This is a bit tricky because most psi values
+	#will be NA, due to the fact that most genes have 0 counts in any given cell
+
+	pvals = {} #{gene : pval}
+
+	conditions = psidf['condition'].tolist()
+	conditions = list(set(conditions))
+	conditionA = conditions[0]
+	conditionB = conditions[1]
+	condAdf = psidf.loc[psidf['condition'] == conditionA]
+	condBdf = psidf.loc[psidf['condition'] == conditionB]
+
+	colnames = list(psidf.columns.values)
+	genes = [c for c in colnames if c != 'cellid' and c != 'condition']
+
+	for gene in genes:
+		condApsis = condAdf[gene].tolist()
+		condApsis = [p for p in condApsis if p != 'NA']
+		condBpsis = condBdf[gene].tolist()
+		condBpsis = [p for p in condBpsis if p != 'NA']
+
+		#wilcoxon rank-sum test
+		#If either condApsis or condBpsis is empty, p = NA
+		if not condApsis or not condBpsis:
+			p = 'NA'
+		else:
+			p = ranksums(condApsis, condBpsis)[1]
+			p = round(float('{:.2e}'.format(p)), 3)
+		pvals[gene] = p
+
+	#Correct pvalues using BH method, but only using pvalues that are not NA
+	genes = list(pvals.keys())
+	pvalues = list(pvals.values())
+	pvaluesformultitest = [pval for pval in pvalues if str(pval) != 'NA']
+	fdrs = list(multipletests(pvaluesformultitest, method = 'fdr_bh')[1])
+	fdrs = [float('{:.2e}'.format(fdr)) for fdr in fdrs]
+
+	#Now we need to incorporate the places where p = NA into the list of FDRs (also as NA)
+	fdrswithnas = []
+	fdrindex = 0
+	for pvalue in pvalues:
+		if str(pvalue) != 'NA':
+			fdrswithnas.append(fdrs[fdrindex])
+			fdrindex +=1
+		elif str(pvalue) == 'NA':
+			fdrswithnas.append(np.nan)
+	fdrswithnas = [[fdr] for fdr in fdrswithnas] #fdr must be in list for conversion to df
+
+	correctedpvals = dict(zip(genes, fdrswithnas))
+
+	#Make df
+	pvalues = [[p] for p in pvalues] #p must be in list for conversion to df
+	pvals = dict(zip(genes, pvalues))
+	rawpdf = pd.DataFrame.from_dict(pvals, orient = 'index')
+	rawpdf.columns = ['raw_pval']
+	fdrdf = pd.DataFrame.from_dict(correctedpvals, orient = 'index')
+	fdrdf.columns = ['fdr']
+
+	#Merge rawpdf and fdrdf
+	df = rawpdf.merge(fdrdf, how = 'inner', left_index = True, right_index = True)
+
+	return df
+
 
 
 		
@@ -577,5 +736,8 @@ countsumdf = collapseclusters(bigdf)
 psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
 print(psidf.head())
 calculatedpsi_fromcollapsedclusters(psidf, 'Relapse', 'Diagnosis')
+dotest_bootstrapclusters(bigdf, posfactors, 0.4, 5, 'Relapse', 'Diagnosis')
 
+#cell by cell stuff
 #psidf = calculatepsi_cellbycell(bigdf, posfactors)
+#cellbycellpvaldf = dotest_cellbycell(psidf)
