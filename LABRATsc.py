@@ -12,6 +12,7 @@ from scipy.stats import ranksums
 from statsmodels.stats.multitest import multipletests
 import gffutils
 import pickle
+import argparse
 
 
 def read_quants_bin(base_dir, clipped=False, mtype="data"):
@@ -102,7 +103,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
 
             except:
                 print ("\nRead total " + str(line_count-1) + " cells")
-                print ("Found total " + str(tot_umi_count) + " reads")
+                print ("Found total " + str(round(tot_umi_count)) + " reads")
                 break
 
             if cell_umi_counts > 0.0:
@@ -139,7 +140,8 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
     barcodes = [os.path.basename(os.path.abspath(base_dir)) + '_' + b for b in barcodes]
     alv = alv.set_index([barcodes])
 
-    return alv.head(n = 50) #only 50 cells for now
+    #for testing, can use alv.head() here to only return first n cells
+	return alv
 
 def createbigdf(alevindir):
     #Given a directory (alevindir) that contains alevin output subdirectories
@@ -263,7 +265,7 @@ def calculatedpsi_fromcollapsedclusters(psidf, conditionA, conditionB):
 
 	#dpsi is defined as conditionB - conditionA
 	
-	dpsis = {} #{gene : dpsi}
+	dpsis = {} #{gene : [condApsi, condBpsi, dpsi]}
 	colnames = list(psidf.columns.values)
 	colnames = [c for c in colnames if c != 'condition']
 
@@ -273,11 +275,16 @@ def calculatedpsi_fromcollapsedclusters(psidf, conditionA, conditionB):
 		if condApsi == 'NA' or condBpsi == 'NA':
 			dpsi = 'NA'
 		else:
+			condApsi = round(condApsi, 3)
+			condBpsi = round(condBpsi, 3)
 			dpsi = round(condBpsi - condApsi, 3)
-		dpsis[gene] = [dpsi]
+		dpsis[gene] = [condApsi, condBpsi, dpsi]
 
-	df = pd.DataFrame.from_dict(dpsis)
-
+	#Turn into df
+	df = pd.DataFrame.from_dict(dpsis, orient = 'index')
+	df = df.reset_index()
+	df.columns = ['gene', '{0}_psi'.format(conditionA), '{0}_psi'.format(conditionB), 'deltapsi']
+	
 	return df
 
 def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, conditionA, conditionB):
@@ -295,7 +302,7 @@ def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, c
 	condBpsis = {} #{gene : [psi values from samples]}
 
 	for i in range(numberofsamples):
-		print('Sample ' + str(i))
+		print('Sample ' + str(i + 1))
 		#sample rows (cells)
 		condAsamp = condAdf.sample(frac = fractosample, replace = False, axis = 'index')
 		condBsamp = condBdf.sample(frac = fractosample, replace = False, axis = 'index')
@@ -352,7 +359,7 @@ def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, c
 			fdrswithnas.append(fdrs[fdrindex])
 			fdrindex +=1
 		elif str(pvalue) == 'NA':
-			fdrswithnas.append(np.nan)
+			fdrswithnas.append('NA')
 	fdrswithnas = [[fdr] for fdr in fdrswithnas] #fdr must be in list for conversion to df
 
 	correctedpvals = dict(zip(genes, fdrswithnas))
@@ -367,6 +374,8 @@ def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, c
 
 	#Merge rawpdf and fdrdf
 	df = rawpdf.merge(fdrdf, how = 'inner', left_index = True, right_index = True)
+	df = df.reset_index()
+	df.columns = ['gene', 'raw_pval', 'FDR']
 
 	return df	
 
@@ -408,6 +417,7 @@ def calculatepsi_cellbycell(bigdf, posfactors):
 				psi = 'NA'
 			else:
 				psi = sum(scaledcounts) / sum(rawcounts)
+				psi = round(psi, 3)
 
 			allpsidicts[cellid][geneid] = psi
 
@@ -422,6 +432,55 @@ def calculatepsi_cellbycell(bigdf, posfactors):
 	#Merge condition column back in
 	df = pd.merge(conditiondf, df, how = 'inner', on = 'cellid')
 
+	return df
+
+def calculatedpsi_cellbycell(psidf, conditionA, conditionB):
+	#Given a dataframe a cell-level psi values (from calculatepsi_cellbycell())
+	#calculate deltapsi (conditionB - conditionA)
+	#This is defined as the difference in median psi values between conditions
+	#Also report the number of cells in each condition that had psi values and went
+	#into the calculation.
+
+	dpsis = {} #{gene : [dpsi, number of cells with psi for condA, number of cells with psi for condB]}
+
+	colnames = list(psidf.columns.values)
+	genes = [c for c in colnames if c != 'cellid' and c != 'condition']
+	condAdf = psidf.loc[psidf['condition'] == conditionA]
+	condBdf = psidf.loc[psidf['condition'] == conditionB]
+
+	for gene in genes:
+		condApsis = condAdf[gene].tolist()
+		condBpsis = condBdf[gene].tolist()
+		condApsis = [psi for psi in condApsis if psi != 'NA']
+		condBpsis = [psi for psi in condBpsis if psi != 'NA']
+		condAcells = len(condApsis)
+		condBcells = len(condBpsis)
+
+		#if either all condA psis are NA or all condB psis are NA, delta psi = NA
+		if condBpsis and not condApsis:
+			condAmed = 'NA'
+			condBmed = round(np.median(condBpsis), 3)
+			dpsi = 'NA'
+		elif condApsis and not condBpsis:
+			condAmed = round(np.median(condApsis), 3)
+			condBmed = 'NA'
+			dpsi = 'NA'
+		elif not condApsis and not condBpsis:
+			condAmed = 'NA'
+			condBmed = 'NA'
+			dpsi = 'NA'
+		elif condApsis and condBpsis:
+			condAmed = round(np.median(condApsis), 3)
+			condBmed = round(np.median(condBpsis), 3)
+			dpsi = round(condBmed - condAmed, 3)
+
+		dpsis[gene] = [condAmed, condBmed, dpsi, condAcells, condBcells]
+
+	#Turn into df
+	df = pd.DataFrame.from_dict(dpsis, orient = 'index')
+	df = df.reset_index()
+	df.columns = ['gene', '{0}_psi'.format(conditionA), '{0}_psi'.format(conditionB), 'deltapsi', '{0}_cells'.format(conditionA), '{0}_cells'.format(conditionB)]
+	
 	return df
 
 def dotest_cellbycell(psidf):
@@ -488,6 +547,8 @@ def dotest_cellbycell(psidf):
 
 	#Merge rawpdf and fdrdf
 	df = rawpdf.merge(fdrdf, how = 'inner', left_index = True, right_index = True)
+	df = df.reset_index()
+	df.columns = ['gene', 'raw_pval', 'FDR']
 
 	return df
 
@@ -722,22 +783,61 @@ def getpositionfactors(gff, lengthfilter):
 
     
 
-#bigdf = createbigdf(sys.argv[1])
-#bigdf.to_csv('bigdf.txt', sep = '\t', header = True, index = True)
-bigdf = pd.read_csv('bigdf.txt.gz', sep = '\t', header = 0, index_col = 0, compression = 'gzip')
-#posfactors = getpositionfactors(sys.argv[2], 25)
-#with open('posfactors.pkl', 'wb') as outfh:
-#    pickle.dump(posfactors, outfh)
-with open('posfactors.pkl', 'rb') as infh:
-   posfactors = pickle.load(infh)
 
-bigdf = addclusters(bigdf, sys.argv[2])
-countsumdf = collapseclusters(bigdf)
-psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
-print(psidf.head())
-calculatedpsi_fromcollapsedclusters(psidf, 'Relapse', 'Diagnosis')
-dotest_bootstrapclusters(bigdf, posfactors, 0.4, 5, 'Relapse', 'Diagnosis')
+if __name__ == '__main__':
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--mode', type = str, choices = ['cellbycell', 'subsampleClusters'], help = 'How to perform tests? Either compare psi values of individual cells or subsample cells from clusters.')
+	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation.')
+	parser.add_argument('--alevindir', type = str, help = 'Directory containing subdirectories of alevin output.')
+	parser.add_argument('--conditions', type = str, help = 'Two column, tab-delimited file with column names \'sample\' and \'condition\'. First column contains cell ids and second column contains cell condition or cluster.')
+	parser.add_argument('--conditionA', type = str, help = 'Must be found in the second column of the conditions file. Delta psi is calculated as conditionB - conditionA.')
+	parser.add_argument('--conditionB', type = str, help = 'Must be found in the second column of the conditions file. Delta psi is calculated as conditionB - conditionA.')
+	args = parser.parse_args()
 
-#cell by cell stuff
-#psidf = calculatepsi_cellbycell(bigdf, posfactors)
-#cellbycellpvaldf = dotest_cellbycell(psidf)
+	#bigdf is a df (obv) of counts with transcripts as columns and cell ids as rows
+	print('Collecting count data...')
+	bigdf = createbigdf(args.alevindir)
+		
+	print('Adding condition/cluster info...')
+	bigdf = addclusters(bigdf, args.conditions)
+	
+	print('Assigning transcripts to polyA sites...')
+	pklfile = os.path.abspath(args.gff) + '.posfactors.pkl'
+	#Check to see if there is a pickled file a position factors
+	if os.path.exists(pklfile):
+		with open(pklfile, 'rb') as infh:
+			posfactors = pickle.load(infh)
+	else:
+		posfactors = getpositionfactors(args.gff, 25)
+		with open(pklfile, 'wb') as outfh:
+			pickle.dump(posfactors, outfh)
+
+	if args.mode == 'cellbycell':
+		print('Calculating psi values for each cell...')
+		psidf = calculatepsi_cellbycell(bigdf, posfactors)
+		print('Writing table of psi values...')
+		psidf.to_csv('psis.cellbycell.txt.gz', sep = '\t', header = True, index = False, compression = 'gzip')
+		print('Calculating delta psi values...')
+		deltapsidf = calculatedpsi_cellbycell(psidf, args.conditionA, args.conditionB)
+		print('Performing statistical tests...')
+		fdrdf = dotest_cellbycell(psidf)
+		#Merge deltapsidf and fdrdf
+		df = deltapsidf.merge(fdrdf, how = 'inner', on = 'gene', left_index = False, right_index = False)
+		#Write df
+		df.to_csv('results.cellbycell.txt', sep = '\t', header = True, index = False)
+		print('Done!')
+
+	elif args.mode == 'subsampleClusters':
+		print('Collapsing counts across all cells within a cluster...')
+		countsumdf = collapseclusters(bigdf)
+		print('Calculating psi values...')
+		psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
+		print('Calculating delta psi values...')
+		deltapsidf = calculatedpsi_fromcollapsedclusters(psidf, args.conditionA, args.conditionB)
+		print('Performing statistical tests...')
+		fdrdf = dotest_bootstrapclusters(bigdf, posfactors, 0.4, 5, args.conditionA, args.conditionB)
+		#Merge deltapsidf and fdrdf
+		df = deltapsidf.merge(fdrdf, how = 'inner', on = 'gene', left_index = False, right_index = False)
+		#Write df
+		df.to_csv('results.subsampleclusters.txt', sep = '\t', header = True, index = False)
+		print('Done!')
