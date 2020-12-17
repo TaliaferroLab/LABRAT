@@ -242,7 +242,7 @@ def getpositionfactors(gff, lengthfilter):
 
 
 #Make a fasta file containing the "terminal fragments" of all transcripts
-def makeTFfasta(gff, genomefasta, lasttwoexons):
+def makeTFfasta(gff, genomefasta, lasttwoexons, librarytype):
 	TFs = {} #{transcriptid: [chrm, strand, [next to last exon1start, next to last exon1stop], [last exon2start, last exon2stop]]}
 	
 	#Make gff database
@@ -312,7 +312,16 @@ def makeTFfasta(gff, genomefasta, lasttwoexons):
 					exon2seq = seq_dict[chrm].seq[exon2[0] - 1:exon2[1]].reverse_complement().upper()
 
 				TFseq = exon1seq + exon2seq
-				outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
+
+				#If this is 3' end data we are only going to quantify the last 300 nt of every transcript
+				if librarytype == '3pseq':
+					if len(TFseq) < 300:
+						outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
+					else:
+						outfh.write('>' + TF + '\n' + str(TFseq)[-300:] + '\n')
+
+				elif librarytype == 'RNAseq':
+					outfh.write('>' + TF + '\n' + str(seq) + '\n')
 
 	#Get sequences of all exons
 	elif not lasttwoexons:
@@ -328,7 +337,16 @@ def makeTFfasta(gff, genomefasta, lasttwoexons):
 						exonseq = seq_dict[chrm].seq[exon[0] - 1:exon[1]].reverse_complement().upper()
 
 					seq += exonseq
-				outfh.write('>' + TF + '\n' + str(seq) + '\n')
+
+				#If this is 3' end data we are only going to quantify the last 300 nt of every transcript
+				if librarytype == '3pseq':
+					if len(TFseq) < 300:
+						outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
+					else:
+						outfh.write('>' + TF + '\n' + str(TFseq)[-300:] + '\n')
+
+				elif librarytype == 'RNAseq':
+					outfh.write('>' + TF + '\n' + str(seq) + '\n')
 
 
 def runSalmon(threads, reads1, reads2, samplename):
@@ -346,8 +364,8 @@ def runSalmon(threads, reads1, reads2, samplename):
 	subprocess.call(command)
 
 
-def calculatepsi(positionfactors, salmondir):
-	txtpms = {} #{transcriptid : tpm}
+def calculatepsi(positionfactors, salmondir, librarytype):
+	txtpms = {} #{transcriptid : tpm} this is actually tpm or counts depending on library type
 	genetpms = {} #{geneid : [transcript tpms]}
 	posfactorgenetpms = {} #{geneid : [transcripttpms scaled by posfactor]}
 	psis = {} #{geneid : psi}
@@ -363,7 +381,13 @@ def calculatepsi(positionfactors, salmondir):
 			if line[0] == 'Name':
 				continue
 			transcriptid = str(line[0]).split('.')[0]
-			tpm = float(line[3])
+			if librarytype == 'RNAseq':
+				tpm = float(line[3])
+			#For 3p seq data, we don't need to worry about length normalization, and actually we shouldn't
+			#because it would unfairly penalize long transcripts. So take the counts from the salmon quant
+			#instead of the tpm.
+			elif librarytype == '3pseq':
+				tpm = float(line[4]) #this is really counts, but it's simpler to keep the variable name the same
 			txtpms[transcriptid] = tpm
 
 	#Put the transcript tpms for every gene together
@@ -380,12 +404,19 @@ def calculatepsi(positionfactors, salmondir):
 	for gene in posfactorgenetpms:
 		scaledtpm = sum(posfactorgenetpms[gene])
 		totaltpm = sum(genetpms[gene])
-		if totaltpm >= 5:
-			psi = scaledtpm / float(totaltpm)
-			psis[gene] = float(format(psi, '.3f'))
-		else:
-			#psis[gene] = 'NA'
-			psis[gene] = np.nan
+		if librarytype == 'RNAseq':
+			if totaltpm >= 5: #gene level tpm filter
+				psi = scaledtpm / float(totaltpm)
+				psis[gene] = float(format(psi, '.3f'))
+			else:
+				#psis[gene] = 'NA'
+				psis[gene] = np.nan
+		elif librarytype == '3pseq':
+			if totaltpm >= 100: #gene-level count filter
+				psi = scaledtpm / float(totaltpm)
+				psis[gene] = float(format(psi, '.3f'))
+			else:
+				psis[gene] = np.nan
 
 	return psis
 
@@ -816,6 +847,7 @@ def classifygenes(exoniccoords, gff):
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--mode', type = str, choices = ['makeTFfasta', 'runSalmon', 'calculatepsi', 'test'])
+	parser.add_argument('--librarytype', type = str, choices = ['RNAseq', '3pseq'], help = 'Is this RNAseq data or 3\' seq data? Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation. Needed for makeTFfasta and calculatepsi.')
 	parser.add_argument('--genomefasta', type = str, help = 'Genome sequence in fasta format. Needed for makeTFfasta.')
 	parser.add_argument('--lasttwoexons', action = 'store_true', help = 'Used for makeTFfasta. Do you want to only use the last two exons?')
@@ -825,14 +857,14 @@ if __name__ == '__main__':
 	parser.add_argument('--samplename', type = str, help = 'Comma separated list of samplenames.  Needed for runSalmon.')
 	parser.add_argument('--threads', type = str, help = 'Number of threads to use.  Needed for runSalmon.')
 	parser.add_argument('--salmondir', type = str, help = 'Salmon output directory. Needed for calculatepsi.')
-	parser.add_argument('--sampconds', type = str, help = 'Needed for calculatepsi. File containing sample names split by condition. Two column, tab delimited text file. Condition 1 samples in first column, condition2 samples in second column.')
+	parser.add_argument('--sampconds', type = str, help = 'File relating sample names and conditions. See README for details.')
 	parser.add_argument('--conditionA', type = str, help = 'Condition A. deltapsi will be calculated as B-A. Must be a value in the \'condition\' column of the sampconds file.')
 	parser.add_argument('--conditionB', type = str, help = 'Condition B. deltapsi will be calculated as B-A. Must be a value in the \'condition\' column of the sampconds file.')
 	args = parser.parse_args()
 
 
 	if args.mode == 'makeTFfasta':
-		makeTFfasta(args.gff, args.genomefasta, args.lasttwoexons)
+		makeTFfasta(args.gff, args.genomefasta, args.lasttwoexons, args.librarytype)
 
 	elif args.mode == 'runSalmon':
 		forreads = args.reads1.split(',')
@@ -881,7 +913,7 @@ if __name__ == '__main__':
 			#samplename = os.path.basename(sd).split('_')
 			#samplename = ('_rep').join([samplename[0], samplename[1]])
 			
-			psis = calculatepsi(positionfactors, sd)
+			psis = calculatepsi(positionfactors, sd, args.librarytype)
 			psidf = pd.DataFrame.from_dict(psis, orient = 'index')
 			psidf.reset_index(level = 0, inplace = True)
 			psidf.columns = ['Gene', samplename]
