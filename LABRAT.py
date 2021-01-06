@@ -321,7 +321,7 @@ def makeTFfasta(gff, genomefasta, lasttwoexons, librarytype):
 						outfh.write('>' + TF + '\n' + str(TFseq)[-300:] + '\n')
 
 				elif librarytype == 'RNAseq':
-					outfh.write('>' + TF + '\n' + str(seq) + '\n')
+					outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
 
 	#Get sequences of all exons
 	elif not lasttwoexons:
