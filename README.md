@@ -69,6 +69,14 @@ For *Drosophila* annoatations, a separate LABRAT, LABRAT_dm6annotation.py, is pr
 
 When given to LABRAT, these gff annotation files must **not** be compressed.
 
+## Library types
+
+LABRAT accepts high-throughput RNA sequencing data of two types: RNAseq and 3 prime end sequencing. 3 prime end sequencing is very informative for the study of alternative polyadenylation since the majority of reads are relatively easily assignable to the usage of one particular polyadenylation site. This may lead to more accurate quantification of polyadenylation site usage. However, the majority of publicly available data is of the RNAseq variety.
+
+LABRAT uses a parameter `--librarytype` parameter to distinguish between these two possibilities. The possible values for this parameter are `RNAseq` and `3pseq`. If the value is `RNAseq`, the last two exons of every valid transcript are quantified, and the quantifications used for further calculation of 𝜓 are the length-normalized TPM values. Gene-level expression thresholds are set at 5 TPM.
+
+If the value is `3pseq`, then only the last 300 nt of each transcript are quantified (this is due to the average insert length of many 3' end libraries being 150-300 nt), and the quantifications used for further calculation of 𝜓 are read count values (since length normalization of 3' end data is not necessary or wanted). Gene-level expression thresholds are set at 100 counts.
+
 ## Running LABRAT
 
 Running LABRAT consists of three steps:</br>
@@ -81,7 +89,7 @@ Running LABRAT consists of three steps:</br>
 The first step consists of making a fasta file of transcripts that will later be quantified by salmon.  This is done using the following command.
 
 ```
-python LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons
+python LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons --librarytype <librarytype>
 ```
 
 This will create a database that stores information about the gff using [gffutils](https://daler.github.io/gffutils/index.html). Initial creation of this database can take up to several hours, but it is written to disk so that it does not have to be created in future runs. Compressed gff files are not currently supported.
@@ -99,7 +107,7 @@ Only protein-coding transcripts and those with confidently defined ends (i.e. th
 After creating a fasta file, transcript abundances are calculated using salmon. Reads can be either fastq or fasta, and either gzipped or not. If gzipped, filenames must end in '.gz'. Single and paired end reads are supported. **This step should be performed in a clean, empty directory.**
 
 ```
-python LABRAT.py --mode runSalmon --txfasta <output of makeTFfasta> --reads1 <comma separated list of forward read files> --reads2 <Optional, comma separated list of reverse read files> --samplename <comma separated list of sample names> --threads <number of threads to use>
+python LABRAT.py --mode runSalmon --librarytype <librarytype> --txfasta <output of makeTFfasta> --reads1 <comma separated list of forward read files> --reads2 <Optional, comma separated list of reverse read files> --samplename <comma separated list of sample names> --threads <number of threads to use>
 ```
 
 As an example:
