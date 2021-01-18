@@ -51,7 +51,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
     elif mtype == "var":
         quant_file = os.path.join(base_location, "quants_var_mat.gz")
     else:
-        print("wrong mtype:".format( mtype ))
+        print("wrong mtype: {0}".format( mtype ))
         sys.exit(1)
 
     if not os.path.exists(quant_file):
@@ -141,7 +141,7 @@ def read_quants_bin(base_dir, clipped=False, mtype="data"):
     alv = alv.set_index([barcodes])
 
     #for testing, can use alv.head() here to only return first n cells
-	return alv
+    return alv
 
 def createbigdf(alevindir):
     #Given a directory (alevindir) that contains alevin output subdirectories
@@ -215,7 +215,7 @@ def collapseclusters(bigdf):
 
 	return countsumdf
 
-def calculatepsi_fromcollapsedclusters(countsumdf, posfactors):
+def calculatepsi_fromcollapsedclusters(countsumdf, posfactors, readcountfilter):
 	#Calculate psi values for every gene in posfactors
 	#This function takes a df that has one row per cluster/condition
 	#that was produced by collapseclusters().
@@ -239,7 +239,7 @@ def calculatepsi_fromcollapsedclusters(countsumdf, posfactors):
 				rawcounts.append(counts)
 				scaledcounts.append(scaled_counts)
 
-			if sum(rawcounts) <= 0: #add count filter here
+			if sum(rawcounts) < readcountfilter: #add read count filter here. this is the summed number of reads across all cells in the cluster
 				psi = 'NA'
 			else:
 				psi = sum(scaledcounts) / sum(rawcounts)
@@ -287,7 +287,7 @@ def calculatedpsi_fromcollapsedclusters(psidf, conditionA, conditionB):
 	
 	return df
 
-def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, conditionA, conditionB):
+def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, conditionA, conditionB, readcountfilter):
 	#Given a dataframe of counts per cell (usually bigdf, produced by addclusters())
 	#for each condition (cluster), randomly select x% of the cells. Then collapse the clusters
 	#and calculate psivalues using collapseclusters() and calculatepsi_fromcollapsedclusters()
@@ -309,7 +309,7 @@ def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, c
 		#Put the condA and condB back together again
 		df = pd.concat([condAsamp, condBsamp], axis = 0, ignore_index = True)
 		collapseddf = collapseclusters(df)
-		psidf = calculatepsi_fromcollapsedclusters(collapseddf, posfactors)
+		psidf = calculatepsi_fromcollapsedclusters(collapseddf, posfactors, readcountfilter)
 		
 		#Record psi values for each gene
 		colnames = list(psidf.columns.values)
@@ -383,7 +383,7 @@ def dotest_bootstrapclusters(bigdf, posfactors, fractosample, numberofsamples, c
 
 
 
-def calculatepsi_cellbycell(bigdf, posfactors):
+def calculatepsi_cellbycell(bigdf, posfactors, readcountfilter):
 	#Calculate psi values for every gene in every cell
 	#In practice, this is not going to be super useful because many
 	#gene level counts are going to be 0, giving a psi of NA
@@ -413,7 +413,7 @@ def calculatepsi_cellbycell(bigdf, posfactors):
 				rawcounts.append(counts)
 				scaledcounts.append(scaled_counts)
 
-			if sum(rawcounts) <= 0: #add counter filter here
+			if sum(rawcounts) < readcountfilter: #add read count filter here
 				psi = 'NA'
 			else:
 				psi = sum(scaledcounts) / sum(rawcounts)
@@ -789,6 +789,9 @@ if __name__ == '__main__':
 	parser.add_argument('--mode', type = str, choices = ['cellbycell', 'subsampleClusters'], help = 'How to perform tests? Either compare psi values of individual cells or subsample cells from clusters.')
 	parser.add_argument('--gff', type = str, help = 'GFF of transcript annotation.')
 	parser.add_argument('--alevindir', type = str, help = 'Directory containing subdirectories of alevin output.')
+	parser.add_argument('--readcountfilter', type = int, help = 'Minimum read count necessary for calculation of psi values. Genes that do not pass this filter \
+		will have reported psi values of NA. If mode == \'cellbycell\', then this is the number of reads mapping to a gene in that single cell. If mode == \'subsampleClusters\' \
+			then this is the summed number of reads across all cells in a predefined cluster.')
 	parser.add_argument('--conditions', type = str, help = 'Two column, tab-delimited file with column names \'sample\' and \'condition\'. First column contains cell ids and second column contains cell condition or cluster.')
 	parser.add_argument('--conditionA', type = str, help = 'Must be found in the second column of the conditions file. Delta psi is calculated as conditionB - conditionA.')
 	parser.add_argument('--conditionB', type = str, help = 'Must be found in the second column of the conditions file. Delta psi is calculated as conditionB - conditionA.')
@@ -814,7 +817,7 @@ if __name__ == '__main__':
 
 	if args.mode == 'cellbycell':
 		print('Calculating psi values for each cell...')
-		psidf = calculatepsi_cellbycell(bigdf, posfactors)
+		psidf = calculatepsi_cellbycell(bigdf, posfactors, args.readcountfilter)
 		print('Writing table of psi values...')
 		psidf.to_csv('psis.cellbycell.txt.gz', sep = '\t', header = True, index = False, compression = 'gzip')
 		print('Calculating delta psi values...')
@@ -831,11 +834,11 @@ if __name__ == '__main__':
 		print('Collapsing counts across all cells within a cluster...')
 		countsumdf = collapseclusters(bigdf)
 		print('Calculating psi values...')
-		psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors)
+		psidf = calculatepsi_fromcollapsedclusters(countsumdf, posfactors, args.readcountfilter)
 		print('Calculating delta psi values...')
 		deltapsidf = calculatedpsi_fromcollapsedclusters(psidf, args.conditionA, args.conditionB)
 		print('Performing statistical tests...')
-		fdrdf = dotest_bootstrapclusters(bigdf, posfactors, 0.4, 5, args.conditionA, args.conditionB)
+		fdrdf = dotest_bootstrapclusters(bigdf, posfactors, 0.4, 5, args.conditionA, args.conditionB, args.readcountfilter)
 		#Merge deltapsidf and fdrdf
 		df = deltapsidf.merge(fdrdf, how = 'inner', on = 'gene', left_index = False, right_index = False)
 		#Write df
