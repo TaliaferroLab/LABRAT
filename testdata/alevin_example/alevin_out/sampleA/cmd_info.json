@@ -1,0 +1,42 @@
+{
+    "salmon_version": "0.14.1",
+    "libType": "ISR",
+    "mates1": [
+        "samples/SAMPLE_A_GEX_1_S33_L001_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_1_S33_L002_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_1_S33_L003_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L001_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L002_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L003_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L001_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L002_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L003_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L001_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L002_R1_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L003_R1_001.fastq.gz"
+    ],
+    "mates2": [
+        "samples/SAMPLE_A_GEX_1_S33_L001_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_1_S33_L002_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_1_S33_L003_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L001_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L002_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_2_S34_L003_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L001_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L002_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_3_S35_L003_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L001_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L002_R2_001.fastq.gz",
+        "samples/SAMPLE_A_GEX_4_S36_L003_R2_001.fastq.gz"
+    ],
+    "chromiumV3": [],
+    "index": "ref/TFseqs.idx",
+    "threads": "12",
+    "output": "sampleA",
+    "tgMap": "ref/TFseqs.idx.tgMap",
+    "fldMean": "250",
+    "fldSD": "20",
+    "validateMappings": [],
+    "whitelist": "samples/sampleA.txt",
+    "auxDir": "aux_info"
+}
