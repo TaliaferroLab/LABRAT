@@ -148,3 +148,10 @@ Additionally, this file contains a column called 'genetype'. This contains infor
 
 A secondary output file is name **'numberofposfactors.txt'**.  This file contains information about the transcripts that were assigned to each APA site. The column 'numberofposfactors' indicates the number of distinct (separated by at least 25 nt) APA sites found for this gene. The column 'txids' has the IDs of the transcripts assigned to each APA site.  APA sites are separated by underscores and transcripts assigned to the same site are separated by commas. In this column, APA sites are ordered from most upstream to most downstream.  The final column contains the distance between the APA sites, but only if the gene contains just 2 sites.
 
+## Runtime
+
+If LABRAT is encountering a gff genome annotation file for the first time, it indexes this file using [gffutils](https://github.com/daler/gffutils/). This process can take a few hours, depending on the size of the annotation. However, it only needs to be completed once.  All future runs will automatically make use of a database file written after the indexing completes. Importantly, if indexing is interrupted, this file will still be written, and LABRAT will attempt to use this truncated file in the next run. This will cause problems. To prevent this, if indexing is interrupted, be sure to delete the resulting database file. It can be found at the location of the gff annotation, and ends with '.db' 
+
+To test the runtime requirement of LABRAT, we focused on a dataset that considered two conditions with two replicates per condition. Each sample contained approximately 25 million paired end reads. Using a modern Intel Mac laptop running OSX 10.15 with 12 cores, LABRAT analysis of this data took approximately 25 minutes.  This does not include the time taken to index the genome annotation as described above.
+
+
