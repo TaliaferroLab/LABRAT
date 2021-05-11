@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import gffutils
 import os
 import sys
