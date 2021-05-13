@@ -12,7 +12,17 @@ LABRAT quantifies alternative polyadenylation (APA) site usage by assigning a "p
 
 ## Installation
 
-LABRAT is purely python-based (python3), but requires a number of non-standard python modules.  These are most easily installed with [conda](https://docs.conda.io/projects/conda/en/latest/index.html). They are listed below. Versions of each module that are known to be supported are listed, but other versions may work as well.
+### Option 1: conda
+
+The *easiest* and *best* way to install LABRAT is using the [conda](https://docs.conda.io/projects/conda/en/latest/index.html) package manager. LABRAT is available on the [bioconda](https://bioconda.github.io/) channel.
+
+```
+conda install -c bioconda labrat
+```
+
+### Option 2: manual installation
+
+Alternatively, you can download LABRAT directly from this repository. LABRAT is purely python-based (python3), but requires a number of non-standard python modules.  These are most easily installed with [conda](https://docs.conda.io/projects/conda/en/latest/index.html). They are listed below. Versions of each module that are known to be supported are listed, but other versions may work as well.
 
 - python 3.6
 - gffutils 0.9
@@ -37,10 +47,16 @@ This will create a conda environment called 'labrat' that contains all the neces
 source activate labrat
 ```
 
+Uncompress the repository and move into the uncompressed directory. Install LABRAT by typing 
+
+```
+python setup.py install
+```
+
 Then, to make sure you are ready to go, ask for the help options in the LABRAT script by typing
 
 ```
-python LABRAT.py -h
+LABRAT.py -h
 ```
 
 If you see something similar to
@@ -89,7 +105,7 @@ Running LABRAT consists of three steps:</br>
 The first step consists of making a fasta file of transcripts that will later be quantified by salmon.  This is done using the following command.
 
 ```
-python LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons --librarytype <librarytype>
+LABRAT.py --mode makeTFfasta --gff <genomegff> --genomefasta <genome sequence in fasta format> --lasttwoexons --librarytype <librarytype>
 ```
 
 This will create a database that stores information about the gff using [gffutils](https://daler.github.io/gffutils/index.html). Initial creation of this database can take up to several hours, but it is written to disk so that it does not have to be created in future runs. Compressed gff files are not currently supported.
@@ -107,13 +123,13 @@ Only protein-coding transcripts and those with confidently defined ends (i.e. th
 After creating a fasta file, transcript abundances are calculated using salmon. Reads can be either fastq or fasta, and either gzipped or not. If gzipped, filenames must end in '.gz'. Single and paired end reads are supported. **This step should be performed in a clean, empty directory.**
 
 ```
-python LABRAT.py --mode runSalmon --librarytype <librarytype> --txfasta <output of makeTFfasta> --reads1 <comma separated list of forward read files> --reads2 <Optional, comma separated list of reverse read files> --samplename <comma separated list of sample names> --threads <number of threads to use>
+LABRAT.py --mode runSalmon --librarytype <librarytype> --txfasta <output of makeTFfasta> --reads1 <comma separated list of forward read files> --reads2 <Optional, comma separated list of reverse read files> --samplename <comma separated list of sample names> --threads <number of threads to use>
 ```
 
 As an example:
 
 ```
-python LABRAT.py --mode runSalmon --txfasta TFseqs.fa --reads1 CondARep1_1.fq.gz,CondARep2_1.fq.gz,CondARep3_1.fq.gz,CondBRep1_1.fq.gz,CondBRep2_1.fq.gz,CondBRep3_1.fq.gz --reads2 CondARep1_2.fq.gz,CondARep2_2.fq.gz,CondARep3_2.fq.gz,CondBRep1_2.fq.gz,CondBRep2_2.fq.gz,CondBRep3_2.fq.gz --samplename CondARep1,CondARep2,CondARep3,CondBRep1,CondBRep2,CondBRep3 --threads 8
+LABRAT.py --mode runSalmon --txfasta TFseqs.fa --reads1 CondARep1_1.fq.gz,CondARep2_1.fq.gz,CondARep3_1.fq.gz,CondBRep1_1.fq.gz,CondBRep2_1.fq.gz,CondBRep3_1.fq.gz --reads2 CondARep1_2.fq.gz,CondARep2_2.fq.gz,CondARep3_2.fq.gz,CondBRep1_2.fq.gz,CondBRep2_2.fq.gz,CondBRep3_2.fq.gz --samplename CondARep1,CondARep2,CondARep3,CondBRep1,CondBRep2,CondBRep3 --threads 8
 ```
 
 The output of this step will be directories containing salmon quantification files, with one directory per sample.
@@ -137,7 +153,7 @@ sampconds is a tab-delimited file with a column header row that gives informatio
 LABRAT compares 𝜓 values of experimental replicates across experimental conditions to identify genes with statistically significantly different 𝜓 values between conditions.  This is done using a mixed linear effects model that tests the relationship between 𝜓 values and experimental condition. A null model is also created in which the term denoting the experimental condition has been removed.  A likelihood ratio test compares the goodness of fit of these two models to the observed data and assigns a p value for the probability that the real model is a better fit than the null model. In simple comparisons between two conditions, this approach mimics a t-test.  However, this technique has the advantage of being able to easily incorporate covariates into significance testing.  After performing this test on all genes, the raw p values are corrected for multiple hypothesis testing using a Benjamini-Hochsberg correction.
 
 ```
-python LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff>
+LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff>
 ```
 
 ## Expected output files
