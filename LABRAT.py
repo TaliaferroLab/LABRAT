@@ -866,9 +866,15 @@ if __name__ == '__main__':
 
 
 	if args.mode == 'makeTFfasta':
+		if not args.gff or not args.genomefasta or not args.librarytype:
+			print('You have not supplied all the required arguments! See the --help for more info.')
+			sys.exit()
 		makeTFfasta(args.gff, args.genomefasta, args.lasttwoexons, args.librarytype)
 
 	elif args.mode == 'runSalmon':
+		if not args.txfasta or not args.reads1 or not args.samplename or not args.threads:
+			print('You have not supplied all the required arguments! See the --help for more info.')
+			sys.exit()
 		forreads = args.reads1.split(',')
 		if args.reads2:
 			revreads = args.reads2.split(',')
@@ -903,6 +909,9 @@ if __name__ == '__main__':
 				runSalmon(args.threads, freads, None, samplename)
 
 	elif args.mode == 'calculatepsi':
+		if not args.gff or not args.salmondir or not args.librarytype:
+			print('You have not supplied all the required arguments! See the --help for more info.')
+			sys.exit()
 		print('Calculating position factors for every transcript...')
 		positionfactors = getpositionfactors(args.gff, 25)
 		print('Done with position factors!')
