@@ -153,7 +153,7 @@ sampconds is a tab-delimited file with a column header row that gives informatio
 LABRAT compares 𝜓 values of experimental replicates across experimental conditions to identify genes with statistically significantly different 𝜓 values between conditions.  This is done using a mixed linear effects model that tests the relationship between 𝜓 values and experimental condition. A null model is also created in which the term denoting the experimental condition has been removed.  A likelihood ratio test compares the goodness of fit of these two models to the observed data and assigns a p value for the probability that the real model is a better fit than the null model. In simple comparisons between two conditions, this approach mimics a t-test.  However, this technique has the advantage of being able to easily incorporate covariates into significance testing.  After performing this test on all genes, the raw p values are corrected for multiple hypothesis testing using a Benjamini-Hochsberg correction.
 
 ```
-LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff>
+LABRAT.py --mode calculatepsi --salmondir <directory of salmon outputs> --sampconds <sampconds file> --conditionA <conditionA> --conditionB <conditionB> --gff <genomegff> --librarytype <librarytype>
 ```
 
 ## Expected output files
