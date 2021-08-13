@@ -170,4 +170,56 @@ If LABRAT is encountering a gff genome annotation file for the first time, it in
 
 To test the runtime requirement of LABRAT, we focused on a dataset that considered two conditions with two replicates per condition. Each sample contained approximately 25 million paired end reads. Using a modern Intel Mac laptop running OSX 10.15 with 12 cores, LABRAT analysis of this data took approximately 25 minutes.  This does not include the time taken to index the genome annotation as described above.
 
+## Using LABRAT with single cell RNAseq data
+
+LABRAT uses [salmon](https://github.com/COMBINE-lab/salmon/releases) to quantify APA from RNAseq data.  LABRATsc uses an analogous tool, [alevin](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1670-y), for quantification of APA from single cell RNAseq data. An example of the use of LABRATsc can be found in section 4 of [this paper](https://www.sciencedirect.com/science/article/pii/S0076687921001312).
+
+
+LABRATsc compares 𝜓 values between **predefined** groups or clusters of cells. These clusters can be defined using standard approaches such as tSNE or UMAP.  Importantly, quantification with alevin and designation of clusters is not performed by LABRATsc and must be done beforehand.  Following quantification with alevin, transcripts are filtered to keep only those with confidently defined 3' ends exactly as they are in LABRAT-based quantification. Analysis then proceeds upon one of two paths defined by the `--mode` parameter.
+
+If the `--mode` parameter is set to `cellbycell`, then a 𝜓 value is calculated for every (applicable) gene in every cell. In practice, the coverage for most genes in most cells is low or nonexistant. Genes that do not pass a read coverage threshold (indicated by the `--readcount` parameter) have 𝜓 values of NA in that cell. For each gene, 𝜓 values are then compared across cell clusters using the 𝜓 value of individual cells as independent observations.
+
+Alternatively, if the `--mode` parameter is set to `subsampleClusters`, then read counts for each transcript are first summed across all the cells within a cluster. This has the advantage of raising the number of reads associated with each gene, but single cell resolution is lost. Tests to identify genes with regulated APA across cell clusters are performed by creating a distribution of 𝜓 alues for each gene in each cluster through bootstrapping resampling.
+
+### Important considerations for LABRATsc
+
+Many single cell RNAseq libraries are well suited to the quantification of APA because the reads they produce are at or near polyA sites. Still, several important caveats must be considered. 
+
+First, low read depth and dropouts limit the reliable detection and quantification of APA in single cell data. These limiations make the selection of appropriate minimum read thresholds (using the `--readcountfilter` argument) critical. We suggest thresholds of at least 100 counts per gene for cluster-level 𝜓 quantification (`--mode subsampleClusters`) and at least 5 counts per cell for cell-level 𝜓 quantification (`--mode cellbycell`) as starting points, but these thresholds (particularly in the `cellbycell` case) vary considerably between experiments due to a range of technical and biological factors.
+
+Second, while scRNAseq libraries generally capture the 3' ends of mRNAs, they also contain reads that arise due to internal priming on genomically encoded A-rich regions. If these internal priming events occur in close proximity to bonafide polyA sites, they may skew raw 𝜓 values substantially. However, while this may impact the accuracy of raw 𝜓 values for some genes, the relative 𝜓 values between cells should be less affected as the rate of internal priming should be largely consistent across cells.
+
+### Generating input matrices for LABRATsc using alevin
+
+Prior to running LABRATsc, cell-by-isoform count matrices must be produced. This relies on the single-cell transcriptome quantification tool [alevin](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1670-y). For general information about alevin, see its [documentation](https://salmon.readthedocs.io/en/latest/alevin.html). 
+
+The following arguments must be passed to **alevin** for use with LABRATsc, ideally in this order: </br>
+
+- `-l`: Library type. For most single-cell libraries, this will be "ISR".
+- `-1`: A list of files containing the forward sequencing reads.
+- `-2`: A list of files containing the reverse sequencing reads in the same order as `-1`.
+- `--dropseq --chromium --chromiumV3`: One of these depending on the sequencing platform used.
+- `-i`: A salmon index, generated with LABRAT using the `--librarytype 3pseq` argument (see above).
+- `-p`: Number of threads to be used by alevin.
+- `-o`: Output path for each count matrix and metadata
+- `--tgMap`: A transcript-to-gene map file, which consists of each transcript ID in the salmon index listed twice per line, separated by tab
+- `--fldMean 250`: Expected mean fragment length (250 for consistency with LABRAT's execution of salmon).
+- `--fldSD 20`: Expected standard deviation of fragment length (20 for consistency with LABRAT's execution of salmon).
+- `--validateMappings`: Enables selective alignment of reads
+- `--whitelist`: A whitelist of cell barcodes from a previous analysis to restrict quantification to previous identified valid barcodes (Optional)
+
+### Calculating 𝜓 values with LABRATsc
+
+Transcript counts from one or more single-cell libraries are used to calculate 𝜓 values for every gene with at least two APA sites. As with LABRAT, gene-level 𝜓 values are then compared across conditions to identify genes with significant 𝜓 value changes. As described above, LABRATsc provides two diferent approaches for 𝜓 calculation and testing: per-cell or using subsampling within clusters. The relevant options for quantification of 𝜓 values with LABRATsc are as follows: </br>
+
+- `--mode`: `cellbycell` or `subsampleClusters`, as described above
+- `--gff`: path to the gff annotation to be used. It should be the same annotation used to generate the salmon index provided to alevin.
+- `--alevindir`: A directory containing alevin quantification subdirectories with one for each sample. The names of these subdirectories will be appended to the cell names in each sample matrix to form a "sample_barcode" cell ID for each cell. An example `alevindir` can be found [here](https://github.com/TaliaferroLab/LABRAT/tree/singlecell/testdata/alevin_example/alevin_out).
+- `--conditions`: A tab delimited text file with column names "sample" and "condition". The first column contains cell IDs and the second column contains cell condition or cluster. The cell IDs in the sample column must follow the "sample_barcode" structure described above. Note that unlike LABRAT, LABRATsc does not currently support covariates.  An example `conditions` file can be found [here](https://github.com/TaliaferroLab/LABRAT/blob/singlecell/testdata/alevin_example/conditions.tsv).
+- `--readcountfilter`: Minimum read count necessary for calculation of 𝜓 values. Genes that do not pass this threshold will have 𝜓 values of NA. If in `cellbycell` mode, this is the number of reads mapping to a gene in that single cell. If in `subsampleClusters` mode, this is the summed numer of reads mapping to a gene across all cells in a predefined cluster.
+- `--conditionA` and `--conditionB`: In order to define a difference in 𝜓 across conditions, the direction of comparison must be defined. Delta 𝜓 for each gene is defined as the mean 𝜓 value in condition B minus the mean 𝜓 value in condition A. Both `conditionA` and `conditionB` must be found in the condition column of the `conditions` file.
+
+### Expected output of LABRATsc
+
+Following quantification, 𝜓 values for all genes in all conditions as well as raw and Benjamini-Hochberg corrected p-values are reported in files named "results.subsampleclusters.txt" (`subsampleClusters` mode) or "results.cellbycell.txt" (`cellbycell` mode). Differences in mean 𝜓 values across conditions are also reported. In `cellbycell` mode, the results file additionally includes the number of cells in each condition passing read depth filters for each gene. Finally, per-cell psi values are reported for each gene when run in `cellbycell` mode in a file called "psis.cellbycell.txt.gz". These results can be sued to annotate existing single cell analyses.
 
