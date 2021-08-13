@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 #Application of LABRAT to alevin-quantified scRNAseq data
 
 from struct import Struct
