@@ -191,7 +191,9 @@ Second, while scRNAseq libraries generally capture the 3' ends of mRNAs, they al
 
 ### Generating input matrices for LABRATsc using alevin
 
-Prior to running LABRATsc, cell-by-isoform count matrices must be produced. This relies on the single-cell transcriptome quantification tool [alevin](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1670-y). For general information about alevin, see its [documentation](https://salmon.readthedocs.io/en/latest/alevin.html). 
+Prior to running LABRATsc, cell-by-isoform count matrices must be produced. This relies on the single-cell transcriptome quantification tool [alevin](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1670-y). For general information about alevin, see its [documentation](https://salmon.readthedocs.io/en/latest/alevin.html).
+
+alevin should be run using the same transcriptome index produced by LABRAT (the index produced by the `--makeTFfasta` step).
 
 The following arguments must be passed to **alevin** for use with LABRATsc, ideally in this order: </br>
 
