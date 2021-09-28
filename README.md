@@ -225,3 +225,7 @@ Transcript counts from one or more single-cell libraries are used to calculate �
 
 Following quantification, 𝜓 values for all genes in all conditions as well as raw and Benjamini-Hochberg corrected p-values are reported in files named "results.subsampleclusters.txt" (`subsampleClusters` mode) or "results.cellbycell.txt" (`cellbycell` mode). Differences in mean 𝜓 values across conditions are also reported. In `cellbycell` mode, the results file additionally includes the number of cells in each condition passing read depth filters for each gene. Finally, per-cell psi values are reported for each gene when run in `cellbycell` mode in a file called "psis.cellbycell.txt.gz". These results can be sued to annotate existing single cell analyses.
 
+## Citing LABRAT
+
+If you find LABRAT useful for your work, please cite the following publication: [https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-021-07781-1](https://bmcgenomics.biomedcentral.com/articles/10.1186/s12864-021-07781-1).
+
