@@ -342,10 +342,10 @@ def makeTFfasta(gff, genomefasta, lasttwoexons, librarytype):
 
 				#If this is 3' end data we are only going to quantify the last 300 nt of every transcript
 				if librarytype == '3pseq':
-					if len(TFseq) < 300:
-						outfh.write('>' + TF + '\n' + str(TFseq) + '\n')
+					if len(seq) < 300:
+						outfh.write('>' + TF + '\n' + str(seq) + '\n')
 					else:
-						outfh.write('>' + TF + '\n' + str(TFseq)[-300:] + '\n')
+						outfh.write('>' + TF + '\n' + str(seq)[-300:] + '\n')
 
 				elif librarytype == 'RNAseq':
 					outfh.write('>' + TF + '\n' + str(seq) + '\n')
