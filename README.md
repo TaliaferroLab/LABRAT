@@ -10,6 +10,8 @@ It takes advantage of the kmer-based, quasi-mapping of reads to transcripts perf
 
 LABRAT quantifies alternative polyadenylation (APA) site usage by assigning a "psi" (𝜓) value (apologies to the alternative splicing field) for each gene in each sample. Psi values of 0 indicate exclusive usage of the most upstream APA site while 𝜓 values of 1 indicate exclusive usage of the most downstream APA site.  When comparing 𝜓 values across conditions, an increase in 𝜓 reflects increased usage of downstream APA sites while a decrease in 𝜓 reflects increased usage of upstream APA sites.  LABRAT uses 𝜓 values in experimental replicates to identify genes whose APA site usage significantly differs between experimental conditions.
 
+A paper describing the use of LABRAT to look at APA in a variety of contexts can be found [here](https://link.springer.com/article/10.1186/s12864-021-07781-1). Additionally a more protocol-based paper with step-by-step instructions on how to use LABRAT for studying APA in bulk and single cell RNAseq experiments can be found [here](https://www.sciencedirect.com/science/article/pii/S0076687921001312).
+
 ## Installation
 
 ### Option 1: conda
